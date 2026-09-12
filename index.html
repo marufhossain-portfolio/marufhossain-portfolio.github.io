@@ -34,18 +34,25 @@
 
   <!-- ================= PRELOADER ================= -->
   <div class="preloader" id="preloader">
-    <div class="pre-glow"></div>
+    <div class="pre-bg">
+      <span class="pg g1"></span><span class="pg g2"></span><span class="pg g3"></span>
+      <div class="pre-grid"></div>
+    </div>
     <div class="pre-inner">
-      <div class="pre-gauge">
-        <svg viewBox="0 0 120 120">
-          <circle class="gauge-track" cx="60" cy="60" r="52" />
-          <circle class="gauge-progress" id="gaugeProgress" cx="60" cy="60" r="52" />
-        </svg>
-        <div class="pre-pct"><span id="preCount">0</span><small>%</small></div>
+      <div class="pre-stage">
+        <div class="pre-rings"><span class="r1"></span><span class="r2"></span><span class="r3"></span></div>
+        <div class="pre-gauge">
+          <svg viewBox="0 0 120 120">
+            <circle class="gauge-track" cx="60" cy="60" r="52" />
+            <circle class="gauge-progress" id="gaugeProgress" cx="60" cy="60" r="52" />
+          </svg>
+          <div class="pre-pct"><span id="preCount">0</span><small>%</small></div>
+        </div>
       </div>
-      <div class="pre-name"><span>MD. MARUF HOSSAIN</span></div>
-      <div class="pre-sub">Operational Excellence • Production Planning</div>
+      <div class="pre-name"><span class="w">MD.</span> <span class="w">MARUF</span> <span class="w">HOSSAIN</span></div>
+      <div class="pre-sub" id="preStatus">Initializing</div>
       <div class="pre-bar"><i id="preBar"></i></div>
+      <div class="pre-hint">Operational Excellence • Production Planning • Automation</div>
     </div>
     <div class="pre-curtain"><span></span><span></span><span></span><span></span><span></span></div>
   </div>

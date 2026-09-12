@@ -15,9 +15,12 @@
   const preloader = $("#preloader");
   const preCount = $("#preCount");
   const preBar = $("#preBar");
+  const preStatus = $("#preStatus");
   const gauge = $("#gaugeProgress");
   const C = 2 * Math.PI * 52;
   if (gauge) gauge.style.strokeDashoffset = C;
+  const preStages = [[0, "Initializing"], [18, "Loading experience"], [42, "Compiling modules"], [66, "Polishing pixels"], [90, "Almost ready"]];
+  const statusFor = (pct) => { let s = preStages[0][1]; for (const [t, m] of preStages) if (pct >= t) s = m; return s; };
 
   function runPreloader() {
     if (!preloader) return;
@@ -33,6 +36,7 @@
       const pct = Math.round(eased * 100);
       if (preCount) preCount.textContent = pct;
       if (preBar) preBar.style.width = pct + "%";
+      if (preStatus) { const s = statusFor(pct); if (preStatus.textContent !== s) preStatus.textContent = s; }
       if (gauge) gauge.style.strokeDashoffset = C * (1 - eased);
       if (p < 1) requestAnimationFrame(step);
       else setTimeout(finishPreloader, 350);
@@ -44,6 +48,7 @@
     if (!preloader) return;
     if (preCount) preCount.textContent = "100";
     if (preBar) preBar.style.width = "100%";
+    if (preStatus) preStatus.textContent = "Ready";
     if (gauge) gauge.style.strokeDashoffset = 0;
     preloader.classList.add("done");
     document.body.classList.add("loaded");
