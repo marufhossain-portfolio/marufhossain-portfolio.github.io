@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Md. Maruf Hossain | Operational Excellence & Production-Process Automation</title>
+  <meta name="description" content="Portfolio of Md. Maruf Hossain — Industrial & Production Engineer specializing in Operational Excellence, Lean Manufacturing, Production Planning, OEE improvement and production-process automation." />
+  <meta name="author" content="Md. Maruf Hossain" />
+  <meta name="theme-color" content="#05060d" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Md. Maruf Hossain | Operational Excellence & Production-Process Automation" />
+  <meta property="og:description" content="Lean, Six Sigma, OEE and production-process automation — driving measurable operational results." />
+  <meta property="og:image" content="profile.jpg" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <noscript><style>#preloader{display:none!important}body.locked{overflow:auto;height:auto}.reveal{opacity:1!important;transform:none!important}</style></noscript>
+</head>
+
+<body class="locked">
+  <!-- SVG gradient defs -->
+  <svg width="0" height="0" aria-hidden="true" style="position:absolute">
+    <defs>
+      <linearGradient id="preGrad" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#6366f1" /><stop offset="50%" stop-color="#a855f7" /><stop offset="100%" stop-color="#22d3ee" />
+      </linearGradient>
+      <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#6366f1" /><stop offset="100%" stop-color="#22d3ee" />
+      </linearGradient>
+    </defs>
+  </svg>
+
+  <!-- ================= PRELOADER ================= -->
+  <div class="preloader" id="preloader">
+    <div class="pre-glow"></div>
+    <div class="pre-inner">
+      <div class="pre-gauge">
+        <svg viewBox="0 0 120 120">
+          <circle class="gauge-track" cx="60" cy="60" r="52" />
+          <circle class="gauge-progress" id="gaugeProgress" cx="60" cy="60" r="52" />
+        </svg>
+        <div class="pre-pct"><span id="preCount">0</span><small>%</small></div>
+      </div>
+      <div class="pre-name"><span>MD. MARUF HOSSAIN</span></div>
+      <div class="pre-sub">Operational Excellence • Production Planning</div>
+      <div class="pre-bar"><i id="preBar"></i></div>
+    </div>
+    <div class="pre-curtain"><span></span><span></span><span></span><span></span><span></span></div>
+  </div>
+
+  <div class="cursor-dot" id="cursorDot"></div>
+  <div class="cursor-ring" id="cursorRing"></div>
+  <div class="scroll-progress" id="scrollProgress"></div>
+
+  <!-- ================= NAV ================= -->
+  <nav class="nav" id="nav">
+    <a class="logo" href="#home">
+      <span class="mark">MMH</span>
+      <span class="txt">Md. Maruf Hossain<small>OPERATIONAL EXCELLENCE</small></span>
+    </a>
+    <ul class="nav-links" id="navLinks">
+      <li><a href="#home">Home</a></li>
+      <li><a href="#about">About</a></li>
+      <li><a href="#experience">Experience</a></li>
+      <li><a href="#achievements">Impact</a></li>
+      <li><a href="#automation">Automation</a></li>
+      <li><a href="#projects">Projects</a></li>
+      <li><a href="#contact">Contact</a></li>
+    </ul>
+    <div class="nav-actions">
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+        </svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
+      </button>
+      <button class="burger" id="burger" aria-label="Menu" aria-expanded="false"><span></span><span></span><span></span></button>
+    </div>
+  </nav>
+
+  <!-- ================= HERO ================= -->
+  <header class="hero" id="home">
+    <canvas id="particles"></canvas>
+    <div class="aurora"><span class="a1"></span><span class="a2"></span><span class="a3"></span></div>
+
+    <div class="hero-inner">
+      <div class="hero-badge"><span class="pulse-dot"></span> Available for Operational Excellence &amp; PPC roles</div>
+
+      <div class="hero-avatar"><img src="profile.jpg" alt="Md. Maruf Hossain" /></div>
+
+      <h1><span data-split>Md. Maruf</span> <span class="grad reveal-name">Hossain</span></h1>
+      <div class="hero-role"><span id="typed"></span><span class="caret"></span></div>
+
+      <p class="hero-lead">
+        Industrial &amp; Production Engineer driving Lean, Six Sigma and data-driven operational excellence —
+        improving OEE, cutting cost and building digital automation that turns manual reporting into real-time insight.
+      </p>
+
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="#contact">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 5.5A2.5 2.5 0 0 1 4.5 3h15A2.5 2.5 0 0 1 22 5.5v13A2.5 2.5 0 0 1 19.5 21h-15A2.5 2.5 0 0 1 2 18.5v-13zm2.2.5 7.8 5.5L19.8 6H4.2z" /></svg>
+          Let's connect
+        </a>
+        <a class="btn btn-ghost" href="#experience">Explore my work</a>
+      </div>
+
+      <div class="hero-stats">
+        <div class="hero-stat"><b>31%</b><span>OEE IMPROVEMENT</span></div>
+        <div class="hero-stat"><b>10.7 Cr</b><span>BDT KAIZEN SAVINGS</span></div>
+        <div class="hero-stat"><b>500+</b><span>EMPLOYEES TRAINED</span></div>
+      </div>
+
+      <div class="socials">
+        <a href="https://github.com/marufhossain2707" target="_blank" rel="noopener" aria-label="GitHub"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.8 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.5-2.7 5.5-5.3 5.8.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z" /></svg></a>
+        <a href="https://www.linkedin.com/in/md-maruf-hossain-7a564a196" target="_blank" rel="noopener" aria-label="LinkedIn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM3 9h4v12H3zM9 9h3.8v1.7h.1c.5-.9 1.8-1.9 3.6-1.9 3.9 0 4.6 2.5 4.6 5.8V21h-4v-5.6c0-1.3 0-3-1.9-3s-2.2 1.4-2.2 2.9V21H9z" /></svg></a>
+        <a href="mailto:marufhossain2707@gmail.com" aria-label="Email"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 5.5A2.5 2.5 0 0 1 4.5 3h15A2.5 2.5 0 0 1 22 5.5v13A2.5 2.5 0 0 1 19.5 21h-15A2.5 2.5 0 0 1 2 18.5v-13zm2.2.5 7.8 5.5L19.8 6H4.2z" /></svg></a>
+        <a href="tel:+8801788823451" aria-label="Phone"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z" /></svg></a>
+      </div>
+    </div>
+
+    <div class="scroll-cue"><span class="mouse"><i></i></span>Scroll</div>
+  </header>
+
+  <!-- ================= ABOUT ================= -->
+  <section class="section" id="about">
+    <div class="section-head reveal">
+      <div class="eyebrow">About me</div>
+      <h2>Engineering <span class="grad">operational excellence</span></h2>
+    </div>
+
+    <div class="about-grid">
+      <div class="reveal left">
+        <p>
+          I'm a <strong>B.Sc. Industrial &amp; Production Engineer</strong> with deep expertise in Operational
+          Excellence, Lean Manufacturing, Production Planning and Production-Process Automation across cement,
+          poly fibre, flour milling, red lentil, chickpea processing, LED/electrical appliance manufacturing and
+          commodity trading industries.
+        </p>
+        <p>
+          I have a proven record of driving process optimization, <strong>OEE improvement</strong> and supply-chain
+          efficiency through data-driven, cross-functional collaboration — complemented by hands-on experience
+          building digital automation tools (GitHub, open-source frameworks, Vercel-deployed apps and AI automation)
+          to streamline production reporting.
+        </p>
+        <p>
+          I'm passionate about continuous improvement, embedding Lean and Six Sigma methodologies, and optimizing
+          manpower and resources to achieve sustainable growth, superior quality and operational excellence.
+        </p>
+      </div>
+
+      <div class="fact-list reveal right" data-delay="120">
+        <div class="fact"><span class="k">Current</span><span class="v">Sr. Officer (Team Lead) – OPEX</span></div>
+        <div class="fact"><span class="k">Company</span><span class="v">Akij Light Engineering Ltd.</span></div>
+        <div class="fact"><span class="k">Degree</span><span class="v">B.Sc. IPE, BAUST (2022)</span></div>
+        <div class="fact"><span class="k">Location</span><span class="v">Naogaon, Bangladesh</span></div>
+        <div class="fact"><span class="k">Languages</span><span class="v">Bangla, English</span></div>
+        <div class="fact"><span class="k">Focus</span><span class="v">Lean • OEE • PPC • Automation</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= PROFICIENCIES ================= -->
+  <section class="section" id="skills">
+    <div class="section-head reveal">
+      <div class="eyebrow">Proficiencies</div>
+      <h2>A practical <span class="grad">toolkit</span></h2>
+      <p>From shop-floor Industrial Engineering to management reporting and digital automation.</p>
+    </div>
+
+    <div class="marquee reveal">
+      <div class="marquee-track">
+        <span>Lean Manufacturing</span><span>Six Sigma</span><span>Kaizen</span><span>5S</span><span>Value Stream Mapping</span><span>OEE</span><span>DMAIC</span><span>TPM</span><span>SMV</span><span>Time &amp; Motion Study</span><span>Line Balancing</span><span>Capacity Study</span><span>QMS</span><span>SPC</span><span>PPC</span><span>Power BI</span><span>Google Apps Script</span><span>GitHub</span><span>Vercel</span><span>AI Automation</span>
+        <span>Lean Manufacturing</span><span>Six Sigma</span><span>Kaizen</span><span>5S</span><span>Value Stream Mapping</span><span>OEE</span><span>DMAIC</span><span>TPM</span><span>SMV</span><span>Time &amp; Motion Study</span><span>Line Balancing</span><span>Capacity Study</span><span>QMS</span><span>SPC</span><span>PPC</span><span>Power BI</span><span>Google Apps Script</span><span>GitHub</span><span>Vercel</span><span>AI Automation</span>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 3 14h7l-1 8 10-12h-7z" /></svg></div><h4>Operational Excellence</h4><p>Lean Manufacturing, Kaizen, 5S, VSM, OEE, DMAIC and TPM deployment across plants.</p></div>
+      <div class="card reveal" data-delay="60"><div class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h18v4H3zm0 7h12v4H3zm0 7h18v4H3z" /></svg></div><h4>Production Planning &amp; Control</h4><p>Capacity planning, scheduling, delivery performance and optimal resource utilization.</p></div>
+      <div class="card reveal" data-delay="120"><div class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 10 10h-2a8 8 0 1 1-8-8z" /><path d="M13 2v9h9a9 9 0 0 0-9-9z" /></svg></div><h4>Lean &amp; Six Sigma</h4><p>RCA with 5-Why &amp; Fishbone, A3 problem solving, waste reduction and process efficiency.</p></div>
+      <div class="card reveal" data-delay="180"><div class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 3 6v6c0 5 3.8 9.3 9 10 5.2-.7 9-5 9-10V6l-9-4zm-1 13-3-3 1.4-1.4L11 12.2l4.6-4.6L17 9l-6 6z" /></svg></div><h4>Quality Management</h4><p>QMS, QCP, SPC integration, defect reduction and first-pass-yield improvement.</p></div>
+      <div class="card reveal" data-delay="240"><div class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16v12H4zm-2 14h20v2H2z" /><path d="M8 8h8v2H8zm0 3h5v2H8z" /></svg></div><h4>Production-Process Automation</h4><p>Digital OEE/QC/5S systems, Google Apps Script, GitHub Pages &amp; AI-assisted workflows.</p></div>
+      <div class="card reveal" data-delay="300"><div class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 0h8v8h-8z" /></svg></div><h4>Supply Chain &amp; Inventory</h4><p>Cross-functional coordination with SCM, store and commercial for smooth operational flow.</p></div>
+    </div>
+  </section>
+
+  <!-- ================= EXPERIENCE ================= -->
+  <section class="section" id="experience">
+    <div class="section-head reveal">
+      <div class="eyebrow">Career</div>
+      <h2>Professional <span class="grad">experience</span></h2>
+    </div>
+
+    <div class="exp-tabs reveal">
+      <button class="exp-tab active" data-exp="1"><b>Senior Officer – OPEX</b><span>Akij Light Engineering • 2026–Present</span></button>
+      <button class="exp-tab" data-exp="2"><b>Officer – OPEX &amp; PPC</b><span>Akij Essentials • 2024–2026</span></button>
+      <button class="exp-tab" data-exp="3"><b>Assistant Officer – OPEX</b><span>Akij Cement / Poly Fibre • 2023–2024</span></button>
+    </div>
+
+    <div class="exp-panel active" id="exp-1">
+      <div class="exp-card">
+        <h3>Senior Officer (Team Lead) – Operational Excellence</h3>
+        <div class="company">Akij Light Engineering Ltd. (ALEL), Akij Resource | April 2026 – Present</div>
+        <div class="exp-cols">
+          <div class="exp-block"><h5>Operational Excellence</h5><ul>
+            <li>Drive Lean Manufacturing, Kaizen, 5S and continuous improvement across the production floor.</li>
+            <li>Identify bottlenecks and implement productivity improvement actions.</li>
+            <li>Promote standard work, SOP compliance and a continuous-improvement culture.</li>
+          </ul></div>
+          <div class="exp-block"><h5>Production-Process Automation</h5><ul>
+            <li>Designed &amp; deployed a full OEE / QC / 5S digital data-entry and reporting system (web front-end + Google Apps Script + Sheets).</li>
+            <li>Built live OEE entry with SKU/capacity/cycle-time lookups and real-time calculation.</li>
+            <li>QC review workflow and a 5S audit module with historical trend tracking by floor.</li>
+          </ul></div>
+          <div class="exp-block"><h5>PPC &amp; Process Optimization</h5><ul>
+            <li>Ensure optimal utilization of machines, manpower and materials; monitor on-time delivery.</li>
+            <li>Reduce downtime, rejection, changeover time and process variation.</li>
+            <li>Line balancing, item-to-line mapping, Operation Bulletin and SMV/time study.</li>
+            <li>Capacity &amp; manpower studies against demand and per-SKU benchmarks.</li>
+          </ul></div>
+          <div class="exp-block"><h5>Lean, Six Sigma &amp; Quality</h5><ul>
+            <li>Kaizen, 5S and Value Stream Mapping; RCA with 5-Why and Fishbone.</li>
+            <li>DMAIC-based improvement projects and waste-reduction initiatives.</li>
+            <li>QCP monitoring, rejection/rework control and first-pass-yield improvement.</li>
+            <li>Cross-department coordination with Production, Quality, Maintenance, SCM, Store &amp; Commercial.</li>
+          </ul></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="exp-panel" id="exp-2">
+      <div class="exp-card">
+        <h3>Officer – Operational Excellence (OPEX) &amp; Production Planning</h3>
+        <div class="company">Akij Essentials Ltd. (Flour &amp; Daal Unit), Akij Resource | April 2024 – March 2026</div>
+        <div class="exp-cols">
+          <div class="exp-block"><h5>OPEX &amp; PPC</h5><ul>
+            <li>Drove Lean, Kaizen, 5S and continuous improvement across the production floor.</li>
+            <li>Prepared daily, weekly and monthly production plans based on demand and capacity.</li>
+            <li>Ensured optimal utilization of machines, manpower and materials with on-time delivery.</li>
+          </ul></div>
+          <div class="exp-block"><h5>Process Optimization &amp; TPM</h5><ul>
+            <li>Analyzed production data to identify losses and improvement opportunities.</li>
+            <li>Reduced downtime, rejection, changeover time and process variation.</li>
+            <li>Supported TPM activities to improve machine availability and reliability.</li>
+          </ul></div>
+          <div class="exp-block"><h5>Lean, Six Sigma &amp; Quality</h5><ul>
+            <li>Implemented Kaizen, 5S and VSM; RCA using 5-Why and A3 analysis.</li>
+            <li>Drove DMAIC-based improvement and waste-reduction projects.</li>
+            <li>QCP monitoring, process compliance and defect reduction.</li>
+          </ul></div>
+          <div class="exp-block"><h5>Performance, Cost &amp; Development</h5><ul>
+            <li>Developed KPI dashboards for OEE, productivity, downtime and wastage; prepared MIS reports.</li>
+            <li>Drove cost-saving, material-wastage and labor-productivity improvements.</li>
+            <li>Supported automation, digitalization and ERP/MIS system development.</li>
+          </ul></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="exp-panel" id="exp-3">
+      <div class="exp-card">
+        <h3>Assistant Officer – Operational Excellence</h3>
+        <div class="company">Akij Cement Company Ltd., Akij Poly Fibre &amp; Akij Ready Mix Company Ltd. | January 2023 – April 2024</div>
+        <div class="exp-cols">
+          <div class="exp-block"><h5>OPEX &amp; Continuous Improvement</h5><ul>
+            <li>Established Operational Excellence for Akij Poly Fibre and Akij Cement plants.</li>
+            <li>Ran 5S checks, control-plan audits and Gemba walks.</li>
+            <li>Built a daily problem-solving meeting culture using A3 with department heads.</li>
+            <li>Drove cost &amp; time savings through an established Kaizen culture.</li>
+          </ul></div>
+          <div class="exp-block"><h5>Industrial Engineering</h5><ul>
+            <li>Time-study analysis for all functional machines and SMV setting.</li>
+            <li>Identified efficiency and utilization of manpower and machines.</li>
+            <li>Analyzed daily WIP against planned efficiency.</li>
+          </ul></div>
+          <div class="exp-block"><h5>Quality &amp; Maintenance</h5><ul>
+            <li>Increased OEE; ensured 5S across the plant.</li>
+            <li>Maintained waste minimization and reduced major product defects.</li>
+            <li>Introduced TPM to keep equipment in top condition and avoid breakdowns.</li>
+            <li>Assisted in designing, implementing and maintaining the QMS.</li>
+          </ul></div>
+          <div class="exp-block"><h5>New Product Development</h5><ul>
+            <li>Assisted the new-product-development strategy and drove deployment through tactical planning.</li>
+            <li>Implemented the Operational Excellence roadmap across the plant.</li>
+            <li>Shared best practices and networked with the OPEX community.</li>
+          </ul></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= ACHIEVEMENTS ================= -->
+  <section class="section" id="achievements">
+    <div class="section-head reveal">
+      <div class="eyebrow">Impact</div>
+      <h2>Measurable <span class="grad">results</span></h2>
+      <p>Enterprise-wide Kaizen and A3 problem-solving delivered real, quantified value.</p>
+    </div>
+
+    <div class="stats">
+      <div class="stat reveal zoom"><div class="ring"><svg viewBox="0 0 76 76"><circle class="t" cx="38" cy="38" r="34" /><circle class="p" data-ring="92" cx="38" cy="38" r="34" /></svg><span class="ric"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 3 14h7l-1 8 10-12h-7z" /></svg></span></div><div class="stat-num" data-target="31" data-suffix="%">0</div><p>OEE Improvement</p></div>
+      <div class="stat reveal zoom" data-delay="70"><div class="ring"><svg viewBox="0 0 76 76"><circle class="t" cx="38" cy="38" r="34" /><circle class="p" data-ring="72" cx="38" cy="38" r="34" /></svg><span class="ric"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" /></svg></span></div><div class="stat-num" data-target="9" data-suffix="%">0</div><p>Cost Savings</p></div>
+      <div class="stat reveal zoom" data-delay="140"><div class="ring"><svg viewBox="0 0 76 76"><circle class="t" cx="38" cy="38" r="34" /><circle class="p" data-ring="96" cx="38" cy="38" r="34" /></svg><span class="ric"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 20h16v2H4zM6 10h3v8H6zm5-6h3v14h-3zm5 4h3v10h-3z" /></svg></span></div><div class="stat-num" data-target="10.7" data-decimals="1" data-suffix=" Cr">0</div><p>BDT Kaizen Savings</p></div>
+      <div class="stat reveal zoom" data-delay="210"><div class="ring"><svg viewBox="0 0 76 76"><circle class="t" cx="38" cy="38" r="34" /><circle class="p" data-ring="85" cx="38" cy="38" r="34" /></svg><span class="ric"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h8V3H3zm10 8h8V11h-8zM3 21h8v-6H3zm10-12h8V3h-8z" /></svg></span></div><div class="stat-num" data-target="56250" data-suffix=" MT">0</div><p>Productivity Gain</p></div>
+      <div class="stat reveal zoom" data-delay="280"><div class="ring"><svg viewBox="0 0 76 76"><circle class="t" cx="38" cy="38" r="34" /><circle class="p" data-ring="88" cx="38" cy="38" r="34" /></svg><span class="ric"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2" /><path d="M12 7v5l3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></span></div><div class="stat-num" data-target="540781">0</div><p>Minutes Saved</p></div>
+      <div class="stat reveal zoom" data-delay="350"><div class="ring"><svg viewBox="0 0 76 76"><circle class="t" cx="38" cy="38" r="34" /><circle class="p" data-ring="64" cx="38" cy="38" r="34" /></svg><span class="ric"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 4 6v6c0 5 3.4 9.4 8 10 4.6-.6 8-5 8-10V6z" /></svg></span></div><div class="stat-num" data-target="213390" data-suffix=" BDT">0</div><p>Utility Savings</p></div>
+      <div class="stat reveal zoom" data-delay="420"><div class="ring"><svg viewBox="0 0 76 76"><circle class="t" cx="38" cy="38" r="34" /><circle class="p" data-ring="90" cx="38" cy="38" r="34" /></svg><span class="ric"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm-8 1a3 3 0 1 0-3-3 3 3 0 0 0 3 3zm0 2c-2.7 0-6 1.3-6 4v3h8v-3c0-1 .4-1.9 1.1-2.6A8.5 8.5 0 0 0 8 14zm8 0c-2.7 0-6 1.3-6 4v3h12v-3c0-2.7-3.3-4-6-4z" /></svg></span></div><div class="stat-num" data-target="500" data-suffix="+">0</div><p>Employees Trained</p></div>
+    </div>
+  </section>
+
+  <!-- ================= AUTOMATION ================= -->
+  <section class="section" id="automation">
+    <div class="section-head reveal">
+      <div class="eyebrow">Differentiator</div>
+      <h2>Production-process <span class="grad">automation</span></h2>
+      <p>Turning paper-based tracking into a real-time digital system — engineered end to end.</p>
+    </div>
+
+    <div class="showcase">
+      <div class="reveal left">
+        <p class="lead">
+          I designed and deployed a complete digital data-entry, review and reporting workflow for
+          <strong>OEE, QC and 5S</strong> — replacing manual, paper-based production tracking with real-time visibility.
+        </p>
+        <ul>
+          <li><span class="tick"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg></span><span><b>Live OEE entry</b> with automatic SKU / product-group / capacity / cycle-time lookups and real-time OEE calculation.</span></li>
+          <li><span class="tick"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg></span><span><b>QC review workflow</b> verifying operator-reported rejects against sampled QC checks.</span></li>
+          <li><span class="tick"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg></span><span><b>5S audit module</b> with historical trend tracking by floor.</span></li>
+          <li><span class="tick"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg></span><span>Built with <b>GitHub, open-source tools and AI-assisted automation</b>; deployed via GitHub Pages / Vercel-style workflows.</span></li>
+        </ul>
+      </div>
+
+      <div class="mock reveal right" data-delay="120">
+        <div class="mock-bar"><i></i><i></i><i></i><span>OEE • QC • 5S DASHBOARD</span></div>
+        <div class="mock-grid">
+          <div class="mock-tile"><div class="lbl">OEE</div><div class="val g">87.4%</div></div>
+          <div class="mock-tile"><div class="lbl">FPY</div><div class="val">98.1%</div></div>
+          <div class="mock-tile"><div class="lbl">5S SCORE</div><div class="val g">92</div></div>
+          <div class="mock-tile"><div class="lbl">DOWNTIME</div><div class="val">4.2%</div></div>
+          <div class="mock-tile"><div class="lbl">REJECTS</div><div class="val">0.9%</div></div>
+          <div class="mock-tile"><div class="lbl">UNITS</div><div class="val g">12</div></div>
+        </div>
+        <div class="mock-chart"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= PROJECTS ================= -->
+  <section class="section" id="projects">
+    <div class="section-head reveal">
+      <div class="eyebrow">Work &amp; research</div>
+      <h2>Projects &amp; <span class="grad">publication</span></h2>
+    </div>
+
+    <div class="proj-grid">
+      <div class="proj reveal"><div class="tag">Thesis</div><h4>Critical Success Factors of a Sustainable Food Supply Chain</h4><p>An emerging-economy perspective on the factors that make food supply chains sustainable.</p></div>
+      <div class="proj reveal" data-delay="70"><div class="tag">Research</div><h4>Critical Success Factors in Sustainable Food Supply Chains</h4><p>Evaluation of critical success factors for sustainable food supply chains in developing countries.</p></div>
+      <div class="proj reveal" data-delay="140"><div class="tag">Publication</div><h4>World Journal of Engineering and Technology (WJET)</h4><p>Peer-reviewed research publication. <a href="https://doi.org/10.4236/wjet.2024.123030" target="_blank" rel="noopener" style="color:var(--c3)">View paper →</a></p></div>
+      <div class="proj reveal" data-delay="210"><div class="tag">Digital System</div><h4>OEE / QC / 5S Automation Platform</h4><p>Web-based data-entry, review and reporting system replacing manual production tracking.</p></div>
+    </div>
+
+    <div class="repo-head reveal">
+      <h3>Front-end projects on GitHub</h3>
+      <div id="ghStats"><span class="live-badge"><span class="pulse-dot"></span>Loading…</span></div>
+    </div>
+    <div class="repo-grid reveal" id="repos">
+      <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+    </div>
+  </section>
+
+  <!-- ================= CREDENTIALS ================= -->
+  <section class="section" id="credentials">
+    <div class="section-head reveal">
+      <div class="eyebrow">Credentials</div>
+      <h2>Certifications, training &amp; <span class="grad">education</span></h2>
+    </div>
+
+    <div class="two-col" style="margin-bottom:24px">
+      <div class="list-card reveal left">
+        <h4><span class="dot"></span>Courses &amp; Certifications</h4>
+        <ul class="list">
+          <li><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg><span>Post Graduate Diploma in Supply Chain Management (PGDSCM) — ISCEA</span></li>
+          <li><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg><span>Lean Six Sigma White Belt (LSSWB)</span></li>
+          <li><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg><span>Six Sigma Yellow Belt (SSYB)</span></li>
+          <li><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg><span>Lean Wastage Management — Udemy</span></li>
+          <li><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg><span>Business &amp; Operations Management Excellence — Udemy</span></li>
+          <li><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg><span>Operations Management &amp; Total Quality Management — Udemy</span></li>
+        </ul>
+      </div>
+      <div class="list-card reveal right" data-delay="120">
+        <h4><span class="dot"></span>Training</h4>
+        <ul class="list">
+          <li><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg><span>5 Days Training on FSMS (Food Safety Management System)</span></li>
+          <li><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg><span>GMP (Good Manufacturing Practices)</span></li>
+          <li><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg><span>3 Days Fire Safety Training — Bangladesh Fire Service &amp; Civil Defense</span></li>
+        </ul>
+        <h4 style="margin-top:26px"><span class="dot"></span>Computer Proficiency</h4>
+        <div class="chips" style="margin-top:12px">
+          <span class="chip">Google Workspace</span><span class="chip">Apps Script</span><span class="chip">AppSheet</span><span class="chip">Power BI</span><span class="chip">MS Office</span><span class="chip">GitHub</span><span class="chip">Vercel</span><span class="chip">AI Automation</span><span class="chip">Smart ISM</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="timeline">
+      <div class="tl reveal left"><h4>B.Sc. in Industrial &amp; Production Engineering (IPE)</h4><div class="meta">Bangladesh Army University of Science and Technology (BAUST) | 2022 · CGPA 2.90/4.00</div><p>Final-year thesis on critical success factors of sustainable food supply chains.</p></div>
+      <div class="tl reveal left" data-delay="100"><h4>HSC in Science</h4><div class="meta">Naogaon Govt. College, Naogaon | 2018 · GPA 4.50/5.00</div></div>
+      <div class="tl reveal left" data-delay="200"><h4>SSC in Science</h4><div class="meta">Naogaon K.D. Govt. High School, Naogaon | 2016 · GPA 4.89/5.00</div></div>
+    </div>
+  </section>
+
+  <!-- ================= CONTACT ================= -->
+  <section class="section" id="contact">
+    <div class="section-head reveal">
+      <div class="eyebrow">Contact</div>
+      <h2>Let's <span class="grad">connect</span></h2>
+      <p>Open to conversations on operational excellence, production planning and process automation.</p>
+    </div>
+
+    <div class="contact-grid">
+      <div class="contact-card reveal left">
+        <div class="crow"><div class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z" /></svg></div><div><div class="k">Location</div><div class="v">Chalkpanchi, Naogaon Sadar, Naogaon</div></div></div>
+        <div class="crow"><div class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z" /></svg></div><div><div class="k">Phone</div><a class="v" href="tel:+8801788823451">+88 01788823451</a></div></div>
+        <div class="crow"><div class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 5.5A2.5 2.5 0 0 1 4.5 3h15A2.5 2.5 0 0 1 22 5.5v13A2.5 2.5 0 0 1 19.5 21h-15A2.5 2.5 0 0 1 2 18.5v-13zm2.2.5 7.8 5.5L19.8 6H4.2z" /></svg></div><div><div class="k">Email</div><a class="v" href="mailto:marufhossain2707@gmail.com">marufhossain2707@gmail.com</a></div></div>
+        <div class="crow"><div class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM3 9h4v12H3zM9 9h3.8v1.7h.1c.5-.9 1.8-1.9 3.6-1.9 3.9 0 4.6 2.5 4.6 5.8V21h-4v-5.6c0-1.3 0-3-1.9-3s-2.2 1.4-2.2 2.9V21H9z" /></svg></div><div><div class="k">LinkedIn</div><a class="v" href="https://www.linkedin.com/in/md-maruf-hossain-7a564a196" target="_blank" rel="noopener">md-maruf-hossain-7a564a196</a></div></div>
+      </div>
+
+      <form class="contact-form reveal right" id="contactForm" data-delay="120">
+        <div class="field"><label for="cf-name">Your name</label><input id="cf-name" name="name" type="text" required placeholder="Jane Doe" /></div>
+        <div class="field"><label for="cf-email">Your email</label><input id="cf-email" name="email" type="email" required placeholder="jane@example.com" /></div>
+        <div class="field"><label for="cf-message">Message</label><textarea id="cf-message" name="message" required placeholder="How can I help?"></textarea></div>
+        <button class="btn btn-primary" type="submit">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2z" /></svg>
+          Send message
+        </button>
+        <p class="form-note" id="formNote">Opens your email app with the message pre-filled.</p>
+      </form>
+    </div>
+  </section>
+
+  <footer>
+    <p>© <span id="year">2026</span> Md. Maruf Hossain — Operational Excellence &amp; Production-Process Automation</p>
+    <p style="margin-top:6px">Local time in Bangladesh: <span class="clock" id="clock">--:--:--</span></p>
+    <div class="flinks">
+      <a href="https://github.com/marufhossain2707" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://www.linkedin.com/in/md-maruf-hossain-7a564a196" target="_blank" rel="noopener">LinkedIn</a>
+      <a href="mailto:marufhossain2707@gmail.com">Email</a>
+    </div>
+  </footer>
+
+  <button class="to-top" id="toTop" aria-label="Back to top"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l-8 8h5v8h6v-8h5z" /></svg></button>
+
+  <script src="script.js" defer></script>
+</body>
+</html>
