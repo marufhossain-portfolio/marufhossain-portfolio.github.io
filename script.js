@@ -408,7 +408,7 @@
   /* =========================================================
      GITHUB (front-end repos only)
      ========================================================= */
-  const GH_USER = "marufhossain2707";
+  const GH_USER = "marufhossain-portfolio";
   const HIDDEN_REPOS = ["alel-operation-bulletin"];
   const FRONTEND_LANGS = ["HTML", "CSS", "JavaScript", "TypeScript", "Vue", "Svelte", "SCSS"];
   const repoWrap = $("#repos");
