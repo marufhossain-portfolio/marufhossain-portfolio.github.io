@@ -654,3 +654,51 @@ footer .flinks a:hover { color: var(--c3); }
   html { scroll-behavior: auto; }
   .reveal { opacity: 1; transform: none; filter: none; }
 }
+
+/* ---------------- Highlighted digital systems ---------------- */
+.sysgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+.sys {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 26px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  text-decoration: none;
+  color: inherit;
+  overflow: hidden;
+  transition: transform .4s var(--ease), border-color .4s, box-shadow .4s;
+}
+.sys::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(360px circle at var(--mx, 50%) var(--my, 0%), color-mix(in srgb, var(--c3) 18%, transparent), transparent 60%);
+  opacity: 0;
+  transition: opacity .4s;
+  pointer-events: none;
+}
+.sys:hover { transform: translateY(-7px); border-color: color-mix(in srgb, var(--c3) 55%, var(--border)); box-shadow: 0 30px 60px -34px var(--c3); }
+.sys:hover::before { opacity: 1; }
+.sys .ic {
+  width: 52px; height: 52px; border-radius: 15px;
+  display: grid; place-items: center;
+  margin-bottom: 15px;
+  background: var(--grad); background-size: 160% auto;
+  color: #05060d;
+  box-shadow: 0 14px 30px -18px var(--c1);
+}
+.sys .ic svg { width: 26px; height: 26px; }
+.sys h4 { font-size: 17.5px; margin-bottom: 7px; }
+.sys p { color: var(--muted); font-size: 14.5px; flex: 1; }
+.sys .go {
+  margin-top: 18px;
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 13.5px; font-weight: 700; color: var(--c3);
+}
+.sys .go svg { width: 15px; height: 15px; transition: transform .3s var(--ease); }
+.sys:hover .go svg { transform: translateX(5px); }

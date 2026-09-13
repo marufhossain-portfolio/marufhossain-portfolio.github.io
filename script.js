@@ -270,7 +270,7 @@
   /* =========================================================
      CARD GLOW + TILT + MAGNETIC
      ========================================================= */
-  $$(".card, .stat, .proj, .repo, .exp-card, .list-card, .contact-card, .mock").forEach((card) => {
+  $$(".card, .stat, .proj, .repo, .exp-card, .list-card, .contact-card, .mock, .sys").forEach((card) => {
     card.addEventListener("mousemove", (e) => {
       const r = card.getBoundingClientRect();
       const x = e.clientX - r.left, y = e.clientY - r.top;
