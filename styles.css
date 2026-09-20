@@ -351,14 +351,18 @@ button { font-family: inherit; }
 .hero-inner { position: relative; z-index: 2; max-width: 920px; }
 
 .hero-badge {
-  display: inline-flex; align-items: center; gap: 9px;
-  padding: 8px 16px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 10px 20px; border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
   backdrop-filter: blur(10px);
   font-size: 13px; color: var(--muted);
   margin-bottom: 26px;
+  max-width: min(900px, 92vw);
+  text-align: left;
 }
+.hero-badge .hb-text { min-width: 0; line-height: 1.55; }
+@media (max-width: 560px) { .hero-badge { font-size: 11.5px; padding: 9px 15px; border-radius: 20px; } }
 .hero-badge .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c4); box-shadow: 0 0 0 0 rgba(52,211,153,.7); animation: pulse 1.8s infinite; }
 @keyframes pulse { 70% { box-shadow: 0 0 0 10px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
 
