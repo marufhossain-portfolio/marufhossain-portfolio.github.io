@@ -181,11 +181,12 @@
   const typed = $("#typed");
   if (typed) {
     const roles = [
+      "Industrial & Production Engineer (IPE)",
+      "Lean Practitioner",
       "Operational Excellence (OPEX) Leader",
       "Production Planning & Control Specialist",
-      "Lean & Six Sigma Practitioner",
+      "Six Sigma Practitioner",
       "Production-Process Automation Builder",
-      "Industrial & Production Engineer",
     ];
     let ri = 0, ci = 0, del = false;
     const tick = () => {
