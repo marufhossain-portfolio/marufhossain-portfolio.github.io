@@ -134,7 +134,10 @@ button { font-family:inherit; cursor:pointer; }
 <script>
 (function(){
 "use strict";
-var CEO = { name:"CEO Overview", icon:"💼", url:"/opex-dashboards/#ceo" };
+var SINGLES = [
+  { id:"ceo", name:"CEO Overview", icon:"💼", url:"/opex-dashboards/#ceo" },
+  { id:"bd", name:"Business Development Analysis", icon:"🚀", url:"/bd/" }
+];
 
 var SUITES = [
   { id:"manufacturing", name:"Manufacturing Analytics", icon:"🏭", items:[
@@ -180,11 +183,13 @@ var current = "ceo";
 
 function renderNav(){
   nav.innerHTML = '<div class="nav-label">Dashboards</div>';
-  var ceoBtn = document.createElement("button");
-  ceoBtn.className = "nav-item" + (current === "ceo" ? " active" : "");
-  ceoBtn.innerHTML = '<span class="ic">' + CEO.icon + '</span>' + CEO.name;
-  ceoBtn.addEventListener("click", openCeo);
-  nav.appendChild(ceoBtn);
+  SINGLES.forEach(function(sn){
+    var b = document.createElement("button");
+    b.className = "nav-item" + (current === sn.id ? " active" : "");
+    b.innerHTML = '<span class="ic">' + sn.icon + '</span>' + sn.name;
+    b.addEventListener("click", function(){ openSingle(sn.id); });
+    nav.appendChild(b);
+  });
   SUITES.forEach(function(s){
     var b = document.createElement("button");
     b.className = "nav-item" + (current === s.id ? " active" : "");
@@ -194,13 +199,15 @@ function renderNav(){
   });
 }
 
-function openCeo(){
-  current = "ceo";
+function openSingle(id){
+  var sn = SINGLES.find(function(x){ return x.id === id; });
+  if(!sn) return;
+  current = id;
   renderNav();
   tabbar.style.display = "none";
-  frame.src = CEO.url;
+  frame.src = sn.url;
   frame.style.display = "block";
-  crumb.textContent = "CEO Overview";
+  crumb.textContent = sn.name;
   closeSidebar();
 }
 
@@ -247,10 +254,10 @@ function closeSidebar(){ sidebar.classList.remove("open"); overlay.classList.rem
 $("burger").addEventListener("click", function(){ sidebar.classList.add("open"); overlay.classList.add("show"); });
 overlay.addEventListener("click", closeSidebar);
 
-document.querySelector(".brand").addEventListener("click", openCeo);
+document.querySelector(".brand").addEventListener("click", function(){ openSingle("ceo"); });
 
 renderNav();
-openCeo();
+openSingle("ceo");
 })();
 </script>
 </body>
