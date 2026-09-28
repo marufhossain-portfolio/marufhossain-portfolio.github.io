@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sales Funnel & Order Tracking — Sales & Distribution MIS</title>
+  <meta name="description" content="Lead → test drive → booking → invoice → delivery with conversion rates and drop-off analysis." />
+  <meta name="theme-color" content="#05060d" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/design-system.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <script type="module">
+    import { renderShell, el, kpiCards, insights, calcSection, card, fmt, pctStr, color, rag, pill, toolbarButtons, dataTable, downloadCSV, makeRng, barChart, lineChart, doughnutChart } from "./shared/bundle.js";
+    import { REGIONS, MODELS, FUNNEL_STAGES } from "./data/constants.js";
+
+    const shell = renderShell({
+      category: "Sales",
+      kicker: "Sales & Distribution",
+      title: "Sales Funnel & Order Tracking",
+      description: "Lead → test drive → booking → invoice → delivery with conversion rates and drop-off analysis.",
+    });
+    const { main, toolbar } = shell;
+
+    let seed = 20240815;
+    let funnel = [];
+    let orders = [];
+    const charts = [];
+
+    function generate() {
+      const rng = makeRng(seed);
+      const base = [1200, 680, 410, 360, 330];
+      funnel = FUNNEL_STAGES.map((s, i) => ({ stage: s, count: Math.round(base[i] * rng.float(0.92, 1.08)) }));
+
+      const regionData = REGIONS.map((r) => {
+        const leads = rng.int(90, 220);
+        const delivered = Math.round(leads * rng.float(0.16, 0.34));
+        return { region: r, leads, delivered, conversion: (delivered / leads) * 100 };
+      });
+
+      const stageIdx = rng.shuffle([0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4]);
+      orders = [];
+      for (let i = 0; i < 25; i++) {
+        const si = stageIdx[i % stageIdx.length];
+        const stage = FUNNEL_STAGES[si];
+        const model = rng.pick(MODELS);
+        orders.push({
+          id: "ORD-" + String(1000 + rng.int(0, 8999)),
+          model: model.name,
+          region: rng.pick(REGIONS),
+          stage,
+          stageIdx: si,
+          days: rng.int(1, si === 4 ? 5 : si === 0 ? 30 : 20),
+          cycleDays: rng.int(10, 32),
+        });
+      }
+      orders.sort((a, b) => a.stageIdx - b.stageIdx || b.days - a.days);
+
+      return { regionData };
+    }
+
+    function compute() {
+      const leads = funnel[0].count;
+      const delivered = funnel[funnel.length - 1].count;
+      const conversion = (delivered / leads) * 100;
+      const openBookings = funnel[2].count + funnel[3].count;
+      const avgCycle = orders.length ? orders.reduce((a, o) => a + o.cycleDays, 0) / orders.length : 0;
+
+      const transitions = [];
+      for (let i = 0; i < funnel.length - 1; i++) {
+        const from = funnel[i].count;
+        const to = funnel[i + 1].count;
+        transitions.push({
+          label: FUNNEL_STAGES[i] + " → " + FUNNEL_STAGES[i + 1],
+          rate: (to / from) * 100,
+        });
+      }
+
+      return { leads, delivered, conversion, openBookings, avgCycle, transitions };
+    }
+
+    function newChart(h) {
+      const canvas = el("canvas");
+      const box = el("div", { class: "chart-box" + (h ? " tall" : "") }, canvas);
+      return { box, canvas };
+    }
+    function add(c) { charts.push(c); return c; }
+
+    function stagePill(o) {
+      const map = { "Lead": ["warn", "New"], "Test drive": ["warn", "Evaluating"], "Booking": ["good", "Open"], "Invoiced": ["good", "Billed"], "Delivered": ["good", "Done"] };
+      const [st, txt] = map[o.stage] || ["warn", o.stage];
+      return pill(st, txt);
+    }
+
+    function render() {
+      charts.forEach((c) => c.destroy());
+      charts.length = 0;
+      const { regionData } = generate();
+      const c = compute();
+
+      main.innerHTML = "";
+      main.append(
+        kpiCards([
+          { label: "Total leads", value: fmt(c.leads), sub: "top of funnel", status: "good" },
+          { label: "Lead → delivery", value: pctStr(c.conversion), sub: c.delivered + " delivered", status: rag("conversion", c.conversion) },
+          { label: "Open bookings", value: fmt(c.openBookings), sub: "booked + invoiced", status: "good" },
+          { label: "Avg cycle time", value: fmt(c.avgCycle, 1) + " days", sub: "lead to delivery", status: rag("leadTime", c.avgCycle) },
+        ]),
+        el("div", { class: "grid cols-2" },
+          card("Funnel by stage", "", (() => {
+            const { box, canvas } = newChart(true);
+            add(barChart(canvas, {
+              labels: funnel.map((f) => f.stage),
+              datasets: [{ label: "Count", data: funnel.map((f) => f.count), color: color(0) }],
+              yTitle: "Records",
+            }));
+            return box;
+          })()),
+          card("Stage-by-stage conversion %", "", (() => {
+            const { box, canvas } = newChart(true);
+            add(barChart(canvas, {
+              labels: c.transitions.map((t) => t.label),
+              datasets: [{ label: "Conversion %", data: c.transitions.map((t) => +t.rate.toFixed(1)), color: color(1) }],
+              yTitle: "%",
+            }));
+            return box;
+          })())
+        ),
+        el("div", { class: "grid cols-2" },
+          card("Conversion by region", "", (() => {
+            const { box, canvas } = newChart();
+            add(barChart(canvas, {
+              labels: regionData.map((r) => r.region),
+              datasets: [{ label: "Lead → delivery %", data: regionData.map((r) => +r.conversion.toFixed(1)), color: color(2) }],
+              yTitle: "%",
+            }));
+            return box;
+          })()),
+          card("Stage distribution", "", (() => {
+            const { box, canvas } = newChart();
+            add(doughnutChart(canvas, {
+              labels: funnel.map((f) => f.stage),
+              values: funnel.map((f) => f.count),
+            }));
+            return box;
+          })())
+        ),
+        el("h3", { style: "margin:18px 0 10px" }, "Recent orders"),
+        dataTable(
+          [
+            { label: "Order", key: "id" },
+            "Model",
+            "Region",
+            { label: "Current stage", key: "stage", render: (r) => r.stage },
+            { label: "Days in stage", key: "days", align: "right", render: (r) => fmt(r.days) },
+            { label: "Status", key: "stage", render: (r) => stagePill(r) },
+          ],
+          orders
+        ),
+        insights([
+          "Overall lead → delivery conversion is <b>" + pctStr(c.conversion) + "</b> — the biggest drop-off is <b>" + c.transitions[0].label + "</b> at " + pctStr(c.transitions[0].rate, 0) + ".",
+          "Only <b>" + pctStr(c.transitions[c.transitions.length - 1].rate, 0) + "</b> of invoiced units are still pending delivery, signalling a healthy hand-off to distribution.",
+          "Avg cycle time of <b>" + fmt(c.avgCycle, 1) + " days</b> is " + (c.avgCycle <= 14 ? "within a tight window." : c.avgCycle <= 21 ? "acceptable but has room to compress." : "<b>slow</b>; review booking-to-delivery hand-offs."),
+        ]),
+        calcSection("How it's calculated", [
+          "Conversion % = delivered ÷ leads × 100",
+          "Stage drop-off % = (previous stage − this stage) ÷ previous stage × 100",
+          "Cycle time = days from lead creation to delivery",
+          "Stage-to-stage conversion = this stage ÷ previous stage × 100",
+        ], [
+          "Funnel counts are cumulative — every record advances through stages in sequence, so counts decline monotonically.",
+          "Open bookings = booked + invoiced units still awaiting delivery.",
+        ])
+      );
+    }
+
+    function setupToolbar() {
+      toolbar.append(
+        toolbarButtons({
+          onRegenerate: () => { seed = Math.floor(Math.random() * 1e8); render(); },
+          onExport: () => {
+            downloadCSV("sales-funnel-orders",
+              ["Order", "Model", "Region", "Stage", "Days in stage", "Cycle days"],
+              orders.map((o) => ({ "Order": o.id, "Model": o.model, "Region": o.region, "Stage": o.stage, "Days in stage": o.days, "Cycle days": o.cycleDays })));
+          },
+        })
+      );
+    }
+
+    setupToolbar();
+    render();
+  </script>
+</body>
+</html>

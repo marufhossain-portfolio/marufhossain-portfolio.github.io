@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Daily Sales MIS</title>
+  <meta name="description" content="Units sold, revenue and mix by model, dealer and region — the daily pulse of the sales operation." />
+  <meta name="theme-color" content="#05060d" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/design-system.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <script type="module">
+    import { renderShell, el, kpiCards, insights, calcSection, card, fmt, pctStr, color, rag, pill, toolbarButtons, dataTable, downloadCSV, filterBar, makeRng, addDays, fmtDate, fmtDateShort, lineChart, barChart, doughnutChart } from "./shared/bundle.js";
+    import { REGIONS, MODELS, DEALERS } from "./data/constants.js";
+
+    const shell = renderShell({
+      category: "Sales",
+      kicker: "Sales & Distribution",
+      title: "Daily Sales MIS",
+      description: "Units sold, revenue and mix by model, dealer and region — the daily pulse of the sales operation.",
+    });
+    const { main, toolbar } = shell;
+
+    const DAYS = 30;
+    let seed = 20240901;
+    let records = [];
+    let regionFilter = "";
+    let modelFilter = "";
+    const charts = [];
+
+    function generate() {
+      const rng = makeRng(seed);
+      const start = addDays(new Date(2024, 8, 1), 0);
+      const out = [];
+      for (let d = 0; d < DAYS; d++) {
+        const date = addDays(start, d);
+        const txnCount = rng.int(4, 12);
+        for (let t = 0; t < txnCount; t++) {
+          const model = rng.pick(MODELS);
+          const dealer = rng.pick(DEALERS);
+          const units = rng.int(1, 4);
+          const revenue = units * model.price;
+          out.push({ date, model: model.name, modelId: model.id, price: model.price, dealer: dealer.name, region: dealer.region, units, revenue });
+        }
+      }
+      out.sort((a, b) => b.date - a.date);
+      return out;
+    }
+
+    function applyFilters(list) {
+      return list.filter((r) => {
+        if (regionFilter && r.region !== regionFilter) return false;
+        if (modelFilter && r.modelId !== modelFilter) return false;
+        return true;
+      });
+    }
+
+    function compute() {
+      const filtered = applyFilters(records);
+      const units = filtered.reduce((a, r) => a + r.units, 0);
+      const revenue = filtered.reduce((a, r) => a + r.revenue, 0);
+      const avgPrice = units ? revenue / units : 0;
+
+      const daily = [];
+      const byDate = {};
+      for (const r of filtered) {
+        const k = fmtDate(r.date);
+        if (!byDate[k]) byDate[k] = { units: 0, revenue: 0 };
+        byDate[k].units += r.units;
+        byDate[k].revenue += r.revenue;
+      }
+      const sortedDates = Object.keys(byDate).sort();
+      for (const k of sortedDates) daily.push({ date: k, units: byDate[k].units, revenue: byDate[k].revenue });
+
+      const byModel = MODELS.map((m) => ({
+        name: m.name,
+        units: filtered.filter((r) => r.modelId === m.id).reduce((a, r) => a + r.units, 0),
+        revenue: filtered.filter((r) => r.modelId === m.id).reduce((a, r) => a + r.revenue, 0),
+      }));
+
+      const byRegion = REGIONS.map((rg) => ({
+        region: rg,
+        revenue: filtered.filter((r) => r.region === rg).reduce((a, r) => a + r.revenue, 0),
+      })).filter((x) => x.revenue > 0);
+
+      const topModel = byModel.slice().sort((a, b) => b.units - a.units)[0];
+
+      return { filtered, units, revenue, avgPrice, daily, byModel, byRegion, topModel };
+    }
+
+    function newChart(tall) {
+      const canvas = el("canvas");
+      const box = el("div", { class: "chart-box" + (tall ? " tall" : "") }, canvas);
+      return { box, canvas };
+    }
+    function add(c) { charts.push(c); return c; }
+
+    function render() {
+      charts.forEach((c) => c.destroy());
+      charts.length = 0;
+      const c = compute();
+
+      main.innerHTML = "";
+      main.append(
+        kpiCards([
+          { label: "Units sold (MTD)", value: fmt(c.units), sub: "last " + DAYS + " days", status: "good" },
+          { label: "Revenue (MTD)", value: "৳" + fmt(c.revenue), sub: "total sales value", status: rag("revenue", 100) },
+          { label: "Avg price", value: "৳" + fmt(c.avgPrice), sub: "per unit", status: "good" },
+          { label: "Top-selling model", value: c.topModel.name, sub: fmt(c.topModel.units) + " units", status: "good" },
+        ]),
+        filterBar([
+          { type: "select", key: "region", label: "Region", options: [{ value: "", label: "All regions" }, ...REGIONS.map((r) => ({ value: r, label: r }))] },
+          { type: "select", key: "model", label: "Model", options: [{ value: "", label: "All models" }, ...MODELS.map((m) => ({ value: m.id, label: m.name }))] },
+        ], (state) => {
+          regionFilter = state.region;
+          modelFilter = state.model;
+          render();
+        }).el,
+        el("div", { class: "grid cols-2" },
+          card("Daily units trend", "", (() => {
+            const { box, canvas } = newChart(true);
+            add(lineChart(canvas, {
+              labels: c.daily.map((d) => fmtDateShort(new Date(d.date))),
+              datasets: [{ label: "Units", data: c.daily.map((d) => d.units) }],
+              yTitle: "Units", fill: true,
+            }));
+            return box;
+          })()),
+          card("Units by model", "", (() => {
+            const { box, canvas } = newChart(true);
+            add(barChart(canvas, {
+              labels: c.byModel.map((m) => m.name),
+              datasets: [{ label: "Units", data: c.byModel.map((m) => m.units) }],
+              yTitle: "Units",
+            }));
+            return box;
+          })())
+        ),
+        el("div", { class: "grid cols-2" },
+          card("Revenue by region", "", (() => {
+            const { box, canvas } = newChart(true);
+            add(doughnutChart(canvas, { labels: c.byRegion.map((r) => r.region), values: c.byRegion.map((r) => r.revenue) }));
+            return box;
+          })()),
+          card("Revenue by model", "", (() => {
+            const { box, canvas } = newChart(true);
+            add(barChart(canvas, {
+              labels: c.byModel.map((m) => m.name),
+              datasets: [{ label: "Revenue (৳)", data: c.byModel.map((m) => m.revenue) }],
+              yTitle: "Revenue (৳)", horizontal: true,
+            }));
+            return box;
+          })())
+        ),
+        el("h3", { style: "margin:18px 0 10px" }, "Recent transactions"),
+        dataTable(
+          [
+            { label: "Date", key: "date", render: (r) => fmtDate(r.date) },
+            { label: "Model", key: "model" },
+            { label: "Dealer", key: "dealer" },
+            { label: "Region", key: "region" },
+            { label: "Units", key: "units", align: "right", render: (r) => fmt(r.units) },
+            { label: "Revenue", key: "revenue", align: "right", render: (r) => "৳" + fmt(r.revenue) },
+          ],
+          c.filtered.slice(0, 15)
+        ),
+        insights([
+          "<b>" + c.topModel.name + "</b> is the top seller with <b>" + fmt(c.topModel.units) + " units</b> (" + pctStr(c.topModel.units / Math.max(c.units, 1), 0) + " of MTD volume).",
+          "Total MTD revenue is <b>৳" + fmt(c.revenue) + "</b> across <b>" + fmt(c.units) + " units</b>, averaging <b>৳" + fmt(c.avgPrice) + "</b> per unit.",
+          "Best-performing region by revenue is <b>" + c.byRegion.slice().sort((a, b) => b.revenue - a.revenue)[0].region + "</b> at <b>৳" + fmt(c.byRegion.slice().sort((a, b) => b.revenue - a.revenue)[0].revenue) + "</b>.",
+        ]),
+        calcSection("How it's calculated", [
+          "Revenue = Σ (units × model price)",
+          "Avg price = total revenue ÷ total units sold",
+          "Units by model = Σ units for each model in the period",
+          "Revenue by region = Σ (units × price) grouped by dealer region",
+        ], [
+          "Model prices are list price in BDT (৳). Mix shifts between models move the average price.",
+          "Transactions are aggregated to daily totals for the trend chart.",
+        ])
+      );
+    }
+
+    function setupToolbar() {
+      toolbar.append(
+        toolbarButtons({
+          onRegenerate: () => { seed = Math.floor(Math.random() * 1e8); records = generate(); regionFilter = ""; modelFilter = ""; render(); },
+          onExport: () => {
+            const c = compute();
+            downloadCSV("daily-sales", ["Date", "Model", "Dealer", "Region", "Units", "Revenue"], c.filtered.map((r) => ({ "Date": fmtDate(r.date), "Model": r.model, "Dealer": r.dealer, "Region": r.region, "Units": r.units, "Revenue": r.revenue })));
+          },
+        })
+      );
+    }
+
+    records = generate();
+    setupToolbar();
+    render();
+  </script>
+</body>
+</html>

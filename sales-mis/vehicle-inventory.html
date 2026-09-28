@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vehicle Inventory MIS — Sales & Distribution MIS</title>
+  <meta name="description" content="Stock by model, ageing analysis, incoming vs outgoing and over-aged stock alerts." />
+  <meta name="theme-color" content="#05060d" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/design-system.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <script type="module">
+    import { renderShell, el, kpiCards, insights, calcSection, card, fmt, pctStr, color, rag, pill, toolbarButtons, dataTable, downloadCSV, makeRng, barChart, doughnutChart } from "./shared/bundle.js";
+    import { MODELS } from "./data/constants.js";
+
+    const shell = renderShell({
+      category: "Distribution",
+      kicker: "Sales & Distribution",
+      title: "Vehicle Inventory MIS",
+      description: "Stock by model, ageing analysis, incoming vs outgoing and over-aged stock alerts.",
+    });
+    const { main, toolbar } = shell;
+
+    let seed = 20240915;
+    let stock = [];
+    const charts = [];
+    const OVER_AGE = 60;
+
+    function generate() {
+      const rng = makeRng(seed);
+      stock = MODELS.map((m) => {
+        const units = rng.int(18, 90);
+        const ages = Array.from({ length: units }, () => Math.round(rng.float(2, 120)));
+        const avgAge = ages.reduce((a, b) => a + b, 0) / units;
+        const incoming = rng.int(4, 30);
+        const outgoing = rng.int(4, 30);
+        const overAged = ages.filter((a) => a > OVER_AGE).length;
+        return {
+          id: m.id,
+          model: m.name,
+          price: m.price,
+          units,
+          ages,
+          avgAge,
+          incoming,
+          outgoing,
+          value: units * m.price,
+          overAged,
+        };
+      });
+    }
+
+    function compute() {
+      const totalUnits = stock.reduce((a, s) => a + s.units, 0);
+      const totalValue = stock.reduce((a, s) => a + s.value, 0);
+      const allAges = stock.flatMap((s) => s.ages);
+      const avgAge = allAges.length ? allAges.reduce((a, b) => a + b, 0) / allAges.length : 0;
+      const overAgedTotal = stock.reduce((a, s) => a + s.overAged, 0);
+      const ageBuckets = [
+        { label: "0–30 days", count: allAges.filter((a) => a <= 30).length },
+        { label: "31–60 days", count: allAges.filter((a) => a > 30 && a <= 60).length },
+        { label: "60+ days", count: allAges.filter((a) => a > 60).length },
+      ];
+      const totalOutgoing = stock.reduce((a, s) => a + s.outgoing, 0);
+      const avgDailySales = totalOutgoing / 30;
+      const daysOfCover = avgDailySales ? totalUnits / avgDailySales : 0;
+      return { totalUnits, totalValue, avgAge, overAgedTotal, ageBuckets, daysOfCover };
+    }
+
+    function newChart(h) {
+      const canvas = el("canvas");
+      const box = el("div", { class: "chart-box" + (h ? " tall" : "") }, canvas);
+      return { box, canvas };
+    }
+    function add(c) { charts.push(c); return c; }
+
+    function statusPill(s) {
+      if (s.overAged > 0 && s.overAged / s.units > 0.2) return pill("bad", "Over-aged");
+      if (s.avgAge > 45) return pill("warn", "Aging");
+      return pill("good", "Fresh");
+    }
+
+    function render() {
+      charts.forEach((c) => c.destroy());
+      charts.length = 0;
+      const c = compute();
+
+      main.innerHTML = "";
+      main.append(
+        kpiCards([
+          { label: "Total stock", value: fmt(c.totalUnits) + " units", sub: stock.length + " models", status: "good" },
+          { label: "Stock value", value: "৳" + fmt(c.totalValue), sub: "at list price", status: "good" },
+          { label: "Avg ageing", value: fmt(c.avgAge, 1) + " days", sub: "in-stock age", status: rag("ageing", c.avgAge) },
+          { label: "Over-aged units", value: fmt(c.overAgedTotal), sub: "> " + OVER_AGE + " days in stock", status: c.overAgedTotal > 0 ? "warn" : "good" },
+        ]),
+        el("div", { class: "grid cols-2" },
+          card("Stock by model", "", (() => {
+            const { box, canvas } = newChart(true);
+            add(barChart(canvas, {
+              labels: stock.map((s) => s.model),
+              datasets: [{ label: "Units in stock", data: stock.map((s) => s.units), color: color(0) }],
+              yTitle: "Units",
+            }));
+            return box;
+          })()),
+          card("Ageing distribution", "", (() => {
+            const { box, canvas } = newChart(true);
+            add(doughnutChart(canvas, {
+              labels: c.ageBuckets.map((b) => b.label),
+              values: c.ageBuckets.map((b) => b.count),
+              colors: [color(3), color(4), color(5)],
+            }));
+            return box;
+          })())
+        ),
+        el("div", { class: "grid cols-2" },
+          card("Incoming vs outgoing by model", "", (() => {
+            const { box, canvas } = newChart();
+            add(barChart(canvas, {
+              labels: stock.map((s) => s.model),
+              datasets: [
+                { label: "Incoming", data: stock.map((s) => s.incoming), color: color(2) },
+                { label: "Outgoing", data: stock.map((s) => s.outgoing), color: color(6) },
+              ],
+              yTitle: "Units",
+            }));
+            return box;
+          })()),
+          card("Stock value by model", "", (() => {
+            const { box, canvas } = newChart();
+            add(barChart(canvas, {
+              labels: stock.map((s) => s.model),
+              datasets: [{ label: "Value (৳)", data: stock.map((s) => s.value), color: color(1) }],
+              yTitle: "৳",
+              horizontal: true,
+            }));
+            return box;
+          })())
+        ),
+        el("h3", { style: "margin:18px 0 10px" }, "Inventory by model"),
+        dataTable(
+          [
+            "Model",
+            { label: "Stock", key: "units", align: "right", render: (r) => fmt(r.units) },
+            { label: "Avg age", key: "avgAge", align: "right", render: (r) => fmt(r.avgAge, 1) + " d" },
+            { label: "Incoming", key: "incoming", align: "right", render: (r) => fmt(r.incoming) },
+            { label: "Outgoing", key: "outgoing", align: "right", render: (r) => fmt(r.outgoing) },
+            { label: "Value", key: "value", align: "right", render: (r) => "৳" + fmt(r.value) },
+            { label: "Over-aged", key: "overAged", align: "right", render: (r) => fmt(r.overAged) },
+            { label: "Status", key: "overAged", render: (r) => statusPill(r) },
+          ],
+          stock
+        ),
+        insights([
+          "Total inventory is <b>" + fmt(c.totalUnits) + " units</b> worth <b>৳" + fmt(c.totalValue) + "</b>, with average in-stock age of <b>" + fmt(c.avgAge, 1) + " days</b>.",
+          "<b>" + fmt(c.overAgedTotal) + " units</b> are over-aged (>" + OVER_AGE + " days) — prioritize clearance or redistribution to faster-moving regions.",
+          "Estimated days of cover is <b>" + fmt(c.daysOfCover, 1) + " days</b> at current outgoing rate, " + (c.daysOfCover > 45 ? "signalling potential over-stock." : "within a healthy range."),
+        ]),
+        calcSection("How it's calculated", [
+          "Ageing (days) = today − receipt date",
+          "Stock value = stock units × model list price",
+          "Over-aged = age > " + OVER_AGE + " days",
+          "Days of cover = total stock ÷ average daily sales",
+        ], [
+          "Average daily sales is derived from outgoing units ÷ 30 days.",
+          "Ageing buckets: 0–30 (fresh), 31–60 (aging), 60+ (over-aged).",
+        ])
+      );
+    }
+
+    function setupToolbar() {
+      toolbar.append(
+        toolbarButtons({
+          onRegenerate: () => { seed = Math.floor(Math.random() * 1e8); generate(); render(); },
+          onExport: () => {
+            downloadCSV("vehicle-inventory",
+              ["Model", "Stock", "Avg age", "Incoming", "Outgoing", "Value", "Over-aged"],
+              stock.map((s) => ({ "Model": s.model, "Stock": s.units, "Avg age": s.avgAge.toFixed(1), "Incoming": s.incoming, "Outgoing": s.outgoing, "Value": s.value, "Over-aged": s.overAged })));
+          },
+        })
+      );
+    }
+
+    generate();
+    setupToolbar();
+    render();
+  </script>
+</body>
+</html>

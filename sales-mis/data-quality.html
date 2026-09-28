@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data Quality & Validation — Sales & Distribution MIS</title>
+  <meta name="description" content="Duplicate, missing and inconsistent records flagged across sales, finance, inventory and service." />
+  <meta name="theme-color" content="#05060d" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/design-system.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <script type="module">
+    import { renderShell, el, kpiCards, insights, calcSection, card, fmt, pctStr, barChart, doughnutChart, color, rag, pill, toolbarButtons, dataTable, downloadCSV, makeRng } from "./shared/bundle.js";
+    import { DEPARTMENTS } from "./data/constants.js";
+
+    const shell = renderShell({
+      category: "Management",
+      kicker: "Management & Data",
+      title: "Data Quality & Validation",
+      description: "Duplicate, missing and inconsistent records flagged across sales, finance, inventory and service.",
+    });
+    const { main, toolbar } = shell;
+
+    const ISSUE_ORDER = { Duplicate: 0, Missing: 1, Inconsistent: 2 };
+    const INVALID_REGIONS = ["Comilla", "Bogura", "Cumilla", "Narayanganj"];
+
+    let seed = 20240902;
+    let records = [];
+    const charts = [];
+
+    function makeRecord(rng, id) {
+      const dept = rng.pick(DEPARTMENTS);
+      const roll = rng.next();
+      let issueType = "Clean", field = "", value = "";
+      if (roll < 0.12) {
+        issueType = "Missing";
+        if (rng.bool()) { field = "name"; value = "(blank)"; }
+        else { field = "region"; value = "(blank)"; }
+      } else if (roll < 0.24) {
+        issueType = "Inconsistent";
+        const k = rng.int(0, 2);
+        if (k === 0) { field = "revenue"; value = "৳ -" + fmt(rng.int(5, 60) * 1000); }
+        else if (k === 1) { field = "dates"; value = "delivery < booking"; }
+        else { field = "region"; value = rng.pick(INVALID_REGIONS); }
+      }
+      return { id, dept, field, value, issueType };
+    }
+
+    function generate() {
+      const rng = makeRng(seed);
+      const out = [];
+      const UNIQUE = 108;
+      for (let i = 0; i < UNIQUE; i++) {
+        out.push(makeRecord(rng, "REC-" + String(1000 + i).padStart(4, "0")));
+      }
+      const DUP = 120 - UNIQUE;
+      for (let i = 0; i < DUP; i++) {
+        const src = rng.pick(out);
+        out.push({ id: src.id, dept: src.dept, field: "id", value: src.id, issueType: "Duplicate" });
+      }
+      return out;
+    }
+
+    function compute() {
+      const total = records.length;
+      const dup = records.filter((r) => r.issueType === "Duplicate").length;
+      const missing = records.filter((r) => r.issueType === "Missing").length;
+      const inconsistent = records.filter((r) => r.issueType === "Inconsistent").length;
+      const clean = total - dup - missing - inconsistent;
+      const quality = (clean / total) * 100;
+
+      const byType = [
+        { type: "Duplicate", count: dup },
+        { type: "Missing", count: missing },
+        { type: "Inconsistent", count: inconsistent },
+      ];
+
+      const byDept = DEPARTMENTS.map((d) => ({ dept: d, count: records.filter((r) => r.dept === d && r.issueType !== "Clean").length }));
+
+      const flagged = records
+        .filter((r) => r.issueType !== "Clean")
+        .sort((a, b) => (ISSUE_ORDER[a.issueType] - ISSUE_ORDER[b.issueType]) || a.dept.localeCompare(b.dept));
+
+      return { total, dup, missing, inconsistent, clean, quality, byType, byDept, flagged };
+    }
+
+    function newChart(h) {
+      const canvas = el("canvas");
+      const box = el("div", { class: "chart-box" + (h ? " tall" : "") }, canvas);
+      return { box, canvas };
+    }
+    function add(c) { charts.push(c); return c; }
+
+    function issuePill(t) {
+      return pill(t === "Duplicate" ? "bad" : t === "Missing" ? "warn" : "bad", t);
+    }
+
+    function render() {
+      charts.forEach((c) => c.destroy());
+      charts.length = 0;
+      const c = compute();
+
+      main.innerHTML = "";
+      main.append(
+        kpiCards([
+          { label: "Total records", value: fmt(c.total), sub: "all departments", status: "good" },
+          { label: "Duplicates", value: fmt(c.dup), sub: "same key >1 time", status: "bad" },
+          { label: "Missing fields", value: fmt(c.missing), sub: "required field blank", status: "warn" },
+          { label: "Inconsistent", value: fmt(c.inconsistent), sub: "fails validation rule", status: "bad" },
+          { label: "Data quality", value: pctStr(c.quality), sub: "clean ÷ total", status: rag("dataQuality", c.quality) },
+        ]),
+        el("div", { class: "grid cols-2" },
+          card("Issues by type", "", (() => {
+            const { box, canvas } = newChart();
+            add(barChart(canvas, {
+              labels: c.byType.map((t) => t.type),
+              datasets: [{ label: "Records", data: c.byType.map((t) => t.count), backgroundColor: ["#f87171", "#fbbf24", "#f472b6"] }],
+              yTitle: "Records",
+            }));
+            return box;
+          })()),
+          card("Issues by department", "", (() => {
+            const { box, canvas } = newChart();
+            add(doughnutChart(canvas, { labels: c.byDept.map((d) => d.dept), values: c.byDept.map((d) => d.count) }));
+            return box;
+          })())
+        ),
+        el("div", { class: "grid cols-2" },
+          card("Clean vs flagged", "", (() => {
+            const { box, canvas } = newChart();
+            add(doughnutChart(canvas, {
+              labels: ["Clean", "Flagged"],
+              values: [c.clean, c.dup + c.missing + c.inconsistent],
+              colors: ["#34d399", "#f87171"],
+            }));
+            return box;
+          })()),
+          card("Issue summary", "",
+            el("div", { class: "insights" },
+              el("ul",
+                el("li", { html: "<b>Duplicate</b> — " + c.dup + " record(s) share an existing key. Deduplicate by keeping the canonical record." }),
+                el("li", { html: "<b>Missing</b> — " + c.missing + " record(s) with a blank required field (name / region). Impute or backfill from source." }),
+                el("li", { html: "<b>Inconsistent</b> — " + c.inconsistent + " record(s) failing a rule (negative revenue, delivery before booking, unknown region)." })
+              )
+            )
+          )
+        ),
+        dataTable(
+          [
+            "Record ID",
+            "Department",
+            "Field",
+            { label: "Issue type", key: "issueType", render: (r) => issuePill(r.issueType) },
+            "Value",
+            { label: "Status", key: "issueType", render: (r) => pill(r.issueType === "Missing" ? "warn" : "bad", r.issueType === "Missing" ? "Review" : "Fix required") },
+          ],
+          c.flagged
+        ),
+        insights([
+          "<b>" + c.dup + " duplicates, " + c.missing + " missing and " + c.inconsistent + " inconsistent</b> records detected across " + fmt(c.total) + " total — overall data quality <b>" + pctStr(c.quality) + "</b>.",
+          "Deduplicate by keeping one canonical record per key; merge or discard the remainder before reporting.",
+          "Impute missing name/region from linked order or dealer master; apply referential checks so region must exist in the reference list.",
+          "Add validation rules: reject negative revenue, delivery date earlier than booking, and foreign keys not present in master data.",
+        ]),
+        calcSection("How it's calculated", [
+          "Data quality % = clean records ÷ total records × 100",
+          "Duplicate = same key appears more than once",
+          "Missing = a required field is blank",
+          "Inconsistent = fails a validation rule (negative value, invalid date order, foreign key not in reference list)",
+        ], [
+          "Flagged = duplicates + missing + inconsistent. Clean = total − flagged.",
+          "Referential integrity: region values are validated against the REGIONS reference list.",
+        ])
+      );
+    }
+
+    function setupToolbar() {
+      toolbar.append(
+        toolbarButtons({
+          onRegenerate: () => { seed = Math.floor(Math.random() * 1e8); records = generate(); render(); },
+          onExport: () => {
+            const c = compute();
+            downloadCSV("data-quality-flags", ["Record ID", "Department", "Field", "Issue type", "Value"], c.flagged.map((r) => ({ "Record ID": r.id, "Department": r.dept, "Field": r.field, "Issue type": r.issueType, "Value": r.value })));
+          },
+        })
+      );
+    }
+
+    records = generate();
+    setupToolbar();
+    render();
+  </script>
+</body>
+</html>

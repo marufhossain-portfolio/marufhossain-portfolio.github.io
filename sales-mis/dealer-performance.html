@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dealer Performance</title>
+  <meta name="description" content="Dealer-wise sales, target, growth (MoM/YoY) and ranking with variance flags." />
+  <meta name="theme-color" content="#05060d" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/design-system.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <script type="module">
+    import { renderShell, el, kpiCards, insights, calcSection, card, fmt, pctStr, color, rag, ragColor, pill, toolbarButtons, dataTable, downloadCSV, filterBar, makeRng, lineChart, barChart } from "./shared/bundle.js";
+    import { DEALERS } from "./data/constants.js";
+
+    const shell = renderShell({
+      category: "Sales",
+      kicker: "Sales & Distribution",
+      title: "Dealer Performance",
+      description: "Dealer-wise sales, target, growth (MoM/YoY) and ranking with variance flags.",
+    });
+    const { main, toolbar } = shell;
+
+    let seed = 20241101;
+    let regionFilter = "";
+    let rows = [];
+    const charts = [];
+
+    function generate() {
+      const rng = makeRng(seed);
+      return DEALERS.map((d) => {
+        const target = rng.int(90, 220);
+        const sales = Math.round(target * rng.float(0.65, 1.2));
+        const prevMonth = rng.int(70, 190);
+        const prevYear = rng.int(55, 175);
+        const achievement = target ? (sales / target) * 100 : 0;
+        const mom = prevMonth ? ((sales - prevMonth) / prevMonth) * 100 : 0;
+        const yoy = prevYear ? ((sales - prevYear) / prevYear) * 100 : 0;
+        return { id: d.id, dealer: d.name, region: d.region, sales, target, prevMonth, prevYear, achievement, mom, yoy };
+      });
+    }
+
+    function compute() {
+      const filtered = rows.filter((r) => !regionFilter || r.region === regionFilter);
+      const sorted = filtered.slice().sort((a, b) => b.sales - a.sales);
+      sorted.forEach((r, i) => (r.rank = i + 1));
+      const total = filtered.length;
+      const top = sorted[0];
+      const avgAchievement = filtered.reduce((a, r) => a + r.achievement, 0) / Math.max(total, 1);
+      const below = filtered.filter((r) => r.achievement < 100).length;
+      return { filtered: sorted, total, top, avgAchievement, below };
+    }
+
+    function newChart(tall) {
+      const canvas = el("canvas");
+      const box = el("div", { class: "chart-box" + (tall ? " tall" : "") }, canvas);
+      return { box, canvas };
+    }
+    function add(c) { charts.push(c); return c; }
+
+    function render() {
+      charts.forEach((c) => c.destroy());
+      charts.length = 0;
+      const c = compute();
+      const top10 = c.filtered.slice(0, 10);
+
+      main.innerHTML = "";
+      main.append(
+        kpiCards([
+          { label: "Total dealers", value: fmt(c.total), sub: "active network", status: "good" },
+          { label: "Top dealer", value: c.top.dealer, sub: fmt(c.top.sales) + " units", status: "good" },
+          { label: "Avg achievement", value: pctStr(c.avgAchievement, 1), sub: "across dealers", status: rag("achievement", c.avgAchievement) },
+          { label: "Below target", value: c.below + " / " + c.total, sub: "dealers under 100%", status: c.below > 0 ? "warn" : "good" },
+        ]),
+        filterBar([
+          { type: "select", key: "region", label: "Region", options: [{ value: "", label: "All regions" }, ...Array.from(new Set(DEALERS.map((d) => d.region))).map((r) => ({ value: r, label: r }))] },
+        ], (state) => {
+          regionFilter = state.region;
+          render();
+        }).el,
+        el("div", { class: "grid cols-2" },
+          card("Dealer ranking by units (top 10)", "", (() => {
+            const { box, canvas } = newChart(true);
+            add(barChart(canvas, {
+              labels: top10.map((d) => d.dealer),
+              datasets: [{ label: "Units sold", data: top10.map((d) => d.sales) }],
+              yTitle: "Units", horizontal: true,
+            }));
+            return box;
+          })()),
+          card("MoM growth % by dealer", "", (() => {
+            const { box, canvas } = newChart(true);
+            add(barChart(canvas, {
+              labels: top10.map((d) => d.dealer),
+              datasets: [{
+                label: "MoM growth %",
+                data: top10.map((d) => +d.mom.toFixed(1)),
+                backgroundColor: top10.map((d) => (d.mom >= 0 ? "#34d399" : "#f87171")),
+              }],
+              yTitle: "MoM growth %",
+            }));
+            return box;
+          })())
+        ),
+        el("div", { class: "grid cols-2" },
+          card("Achievement % vs target by dealer", "", (() => {
+            const { box, canvas } = newChart(true);
+            add(barChart(canvas, {
+              labels: top10.map((d) => d.dealer),
+              datasets: [{
+                label: "Achievement %",
+                data: top10.map((d) => +d.achievement.toFixed(1)),
+                backgroundColor: top10.map((d) => ragColor("achievement", d.achievement)),
+              }],
+              yTitle: "Achievement %",
+            }));
+            return box;
+          })()),
+          card("YoY growth % by dealer", "", (() => {
+            const { box, canvas } = newChart(true);
+            add(barChart(canvas, {
+              labels: top10.map((d) => d.dealer),
+              datasets: [{
+                label: "YoY growth %",
+                data: top10.map((d) => +d.yoy.toFixed(1)),
+                backgroundColor: top10.map((d) => (d.yoy >= 0 ? "#34d399" : "#f87171")),
+              }],
+              yTitle: "YoY growth %",
+            }));
+            return box;
+          })())
+        ),
+        el("h3", { style: "margin:18px 0 10px" }, "Dealer performance table"),
+        dataTable(
+          [
+            { label: "Rank", key: "rank", align: "right", render: (r) => fmt(r.rank) },
+            { label: "Dealer", key: "dealer" },
+            { label: "Region", key: "region" },
+            { label: "Sales", key: "sales", align: "right", render: (r) => fmt(r.sales) },
+            { label: "Target", key: "target", align: "right", render: (r) => fmt(r.target) },
+            { label: "Achievement", key: "achievement", align: "right", render: (r) => pctStr(r.achievement, 1) },
+            { label: "Growth MoM", key: "mom", align: "right", render: (r) => (r.mom >= 0 ? "+" : "") + r.mom.toFixed(1) + "%" },
+            { label: "Growth YoY", key: "yoy", align: "right", render: (r) => (r.yoy >= 0 ? "+" : "") + r.yoy.toFixed(1) + "%" },
+            { label: "Status", key: "achievement", render: (r) => pill(rag("achievement", r.achievement), r.achievement >= 100 ? "On/Above" : "Below") },
+          ],
+          c.filtered
+        ),
+        insights([
+          "Top performer <b>" + c.top.dealer + "</b> leads with <b>" + fmt(c.top.sales) + " units</b> (" + pctStr(c.top.achievement, 1) + " of target).",
+          "Average achievement is <b>" + pctStr(c.avgAchievement, 1) + "</b> with <b>" + c.below + " dealers</b> below target — " + (c.below > 0 ? "flag for follow-up." : "all dealers on/above target."),
+          "Watch <b>" + c.filtered[c.filtered.length - 1].dealer + "</b> — lowest ranking with " + pctStr(c.filtered[c.filtered.length - 1].achievement, 1) + " achievement.",
+        ]),
+        calcSection("How it's calculated", [
+          "Achievement % = sales ÷ target × 100",
+          "MoM growth % = (sales − previous month) ÷ previous month × 100",
+          "YoY growth % = (sales − previous year) ÷ previous year × 100",
+          "Rank = position by units sold (descending)",
+        ], [
+          "Previous month / year are same-period reference figures for growth.",
+          "Achievement ≥ 100% green, 90–99% amber, < 90% red.",
+        ])
+      );
+    }
+
+    function setupToolbar() {
+      toolbar.append(
+        toolbarButtons({
+          onRegenerate: () => { seed = Math.floor(Math.random() * 1e8); rows = generate(); regionFilter = ""; render(); },
+          onExport: () => {
+            const c = compute();
+            downloadCSV("dealer-performance", ["Rank", "Dealer", "Region", "Sales", "Target", "Achievement %", "MoM %", "YoY %"], c.filtered.map((r) => ({ "Rank": r.rank, "Dealer": r.dealer, "Region": r.region, "Sales": r.sales, "Target": r.target, "Achievement %": r.achievement.toFixed(1), "MoM %": r.mom.toFixed(1), "YoY %": r.yoy.toFixed(1) })));
+          },
+        })
+      );
+    }
+
+    rows = generate();
+    setupToolbar();
+    render();
+  </script>
+</body>
+</html>

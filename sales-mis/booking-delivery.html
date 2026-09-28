@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Booking vs Delivery — Sales & Distribution MIS</title>
+  <meta name="description" content="Booked vs delivered, pending backlog and booking-to-delivery lead time by model and region." />
+  <meta name="theme-color" content="#05060d" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/design-system.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <script type="module">
+    import { renderShell, el, kpiCards, insights, calcSection, card, fmt, pctStr, color, rag, pill, filterBar, toolbarButtons, dataTable, downloadCSV, makeRng, addDays, fmtDate, barChart, lineChart } from "./shared/bundle.js";
+    import { REGIONS, MODELS, DEALERS } from "./data/constants.js";
+
+    const shell = renderShell({
+      category: "Distribution",
+      kicker: "Sales & Distribution",
+      title: "Booking vs Delivery",
+      description: "Booked vs delivered, pending backlog and booking-to-delivery lead time by model and region.",
+    });
+    const { main, toolbar } = shell;
+
+    let seed = 20240901;
+    let bookings = [];
+    let region = "All";
+    let model = "All";
+    const charts = [];
+    const OTIF_TARGET = 7;
+    const MONTHS_BACK = 6;
+
+    function generate() {
+      const rng = makeRng(seed);
+      const today = new Date(2024, 8, 30);
+      bookings = [];
+      for (let i = 0; i < 40; i++) {
+        const m = rng.pick(MODELS);
+        const dealer = rng.pick(DEALERS);
+        const bookingDate = addDays(today, -rng.int(0, MONTHS_BACK * 30));
+        const delivered = rng.bool(0.72);
+        const leadTime = rng.int(2, 16);
+        const deliveryDate = delivered ? addDays(bookingDate, leadTime) : null;
+        bookings.push({
+          id: "BK-" + String(1000 + rng.int(0, 8999)),
+          bookingDate,
+          deliveryDate,
+          model: m.name,
+          region: dealer.region,
+          dealer: dealer.name,
+          delivered,
+          leadTime: delivered ? leadTime : null,
+          onTime: delivered ? leadTime <= OTIF_TARGET : null,
+        });
+      }
+      bookings.sort((a, b) => b.bookingDate - a.bookingDate);
+    }
+
+    function filtered() {
+      return bookings.filter((b) =>
+        (region === "All" || b.region === region) &&
+        (model === "All" || b.model === model)
+      );
+    }
+
+    function compute() {
+      const f = filtered();
+      const total = f.length;
+      const deliveredCount = f.filter((b) => b.delivered).length;
+      const pending = total - deliveredCount;
+      const deliveredLt = f.filter((b) => b.delivered && b.leadTime != null).map((b) => b.leadTime);
+      const avgLead = deliveredLt.length ? deliveredLt.reduce((a, b) => a + b, 0) / deliveredLt.length : 0;
+      const onTimeCount = f.filter((b) => b.onTime === true).length;
+      const otif = deliveredCount ? (onTimeCount / deliveredCount) * 100 : 0;
+
+      const monthly = [];
+      const start = new Date(2024, 3, 1);
+      for (let i = 0; i < MONTHS_BACK; i++) {
+        const from = new Date(start.getFullYear(), start.getMonth() + i, 1);
+        const to = new Date(start.getFullYear(), start.getMonth() + i + 1, 0);
+        const booked = f.filter((b) => b.bookingDate >= from && b.bookingDate <= to).length;
+        const del = f.filter((b) => b.deliveryDate && b.deliveryDate >= from && b.deliveryDate <= to).length;
+        monthly.push({ label: from.toLocaleString("en-US", { month: "short" }), booked, del });
+      }
+
+      const backlogByModel = MODELS.map((m) => ({ model: m.name, pending: f.filter((b) => b.model === m.name && !b.delivered).length }));
+      const otifByRegion = REGIONS.map((r) => {
+        const rf = f.filter((b) => b.region === r && b.delivered);
+        const on = rf.filter((b) => b.onTime).length;
+        return { region: r, otif: rf.length ? (on / rf.length) * 100 : 0 };
+      });
+      const leadTrend = monthly.map((m) => ({ label: m.label, v: 0 }));
+      f.filter((b) => b.delivered && b.leadTime != null).forEach((b) => {
+        const m = b.deliveryDate.getMonth() - start.getMonth();
+        if (m >= 0 && m < MONTHS_BACK) leadTrend[m].v += b.leadTime;
+      });
+
+      return { total, deliveredCount, pending, avgLead, otif, monthly, backlogByModel, otifByRegion, leadTrend };
+    }
+
+    function newChart(h) {
+      const canvas = el("canvas");
+      const box = el("div", { class: "chart-box" + (h ? " tall" : "") }, canvas);
+      return { box, canvas };
+    }
+    function add(c) { charts.push(c); return c; }
+
+    function otifPill(b) {
+      if (!b.delivered) return pill("warn", "Pending");
+      return b.onTime ? pill("good", "On-time") : pill("bad", "Late");
+    }
+
+    function render() {
+      charts.forEach((c) => c.destroy());
+      charts.length = 0;
+      const c = compute();
+
+      main.innerHTML = "";
+      main.append(
+        kpiCards([
+          { label: "Total bookings", value: fmt(c.total), sub: "selected scope", status: "good" },
+          { label: "Delivered", value: fmt(c.deliveredCount), sub: pctStr(c.total ? (c.deliveredCount / c.total) * 100 : 0, 0) + " of bookings", status: "good" },
+          { label: "Pending", value: fmt(c.pending), sub: "backlog awaiting delivery", status: c.pending > 15 ? "warn" : "good" },
+          { label: "Avg lead time", value: fmt(c.avgLead, 1) + " days", sub: "booking → delivery", status: rag("leadTime", c.avgLead) },
+        ]),
+        el("div", { class: "grid cols-2" },
+          card("Booked vs delivered by month", "", (() => {
+            const { box, canvas } = newChart(true);
+            add(barChart(canvas, {
+              labels: c.monthly.map((m) => m.label),
+              datasets: [
+                { label: "Booked", data: c.monthly.map((m) => m.booked), color: color(0) },
+                { label: "Delivered", data: c.monthly.map((m) => m.del), color: color(3) },
+              ],
+              yTitle: "Units",
+            }));
+            return box;
+          })()),
+          card("Pending backlog by model", "", (() => {
+            const { box, canvas } = newChart(true);
+            add(barChart(canvas, {
+              labels: c.backlogByModel.map((m) => m.model),
+              datasets: [{ label: "Pending units", data: c.backlogByModel.map((m) => m.pending), color: color(5) }],
+              yTitle: "Units",
+            }));
+            return box;
+          })())
+        ),
+        el("div", { class: "grid cols-2" },
+          card("Lead time trend", "", (() => {
+            const { box, canvas } = newChart();
+            add(lineChart(canvas, {
+              labels: c.leadTrend.map((t) => t.label),
+              datasets: [{ label: "Avg lead time (days)", data: c.leadTrend.map((t) => t.v), color: color(1), fill: true }],
+              yTitle: "Days",
+            }));
+            return box;
+          })()),
+          card("OTIF by region", "", (() => {
+            const { box, canvas } = newChart();
+            add(barChart(canvas, {
+              labels: c.otifByRegion.map((r) => r.region),
+              datasets: [{ label: "OTIF %", data: c.otifByRegion.map((r) => +r.otif.toFixed(1)), color: color(2) }],
+              yTitle: "%",
+            }));
+            return box;
+          })())
+        ),
+        el("h3", { style: "margin:18px 0 10px" }, "Bookings"),
+        dataTable(
+          [
+            { label: "Booking", key: "id" },
+            { label: "Booked date", key: "bookingDate", render: (r) => fmtDate(r.bookingDate) },
+            "Model",
+            "Region",
+            "Dealer",
+            { label: "Status", key: "delivered", render: (r) => (r.delivered ? "Delivered" : "Pending") },
+            { label: "Lead time", key: "leadTime", align: "right", render: (r) => (r.leadTime == null ? "—" : fmt(r.leadTime) + " d") },
+            { label: "OTIF", key: "onTime", render: (r) => otifPill(r) },
+          ],
+          filtered()
+        ),
+        insights([
+          "Avg booking-to-delivery lead time is <b>" + fmt(c.avgLead, 1) + " days</b> against a " + OTIF_TARGET + "-day target — " + (c.avgLead <= OTIF_TARGET ? "on track." : "above target; review dispatch and PDI queue."),
+          "OTIF stands at <b>" + pctStr(c.otif) + "</b> across the selected scope (" + c.onTimeCount + " of " + c.deliveredCount + " on time).",
+          "There are <b>" + fmt(c.pending) + " pending bookings</b>; the largest backlog sits with <b>" + c.backlogByModel.slice().sort((a, b) => b.pending - a.pending)[0].model + "</b>.",
+        ]),
+        calcSection("How it's calculated", [
+          "Lead time (days) = delivery date − booking date",
+          "OTIF % = on-time deliveries ÷ total delivered × 100",
+          "Pending = total booked − delivered",
+          "On-time = lead time ≤ " + OTIF_TARGET + " days",
+        ], [
+          "Pending units are booked but not yet delivered (delivery date is null).",
+          "Lead time is only computed for delivered units; pending units are excluded from the average.",
+        ])
+      );
+    }
+
+    function setupToolbar() {
+      const bar = filterBar([
+        { key: "region", type: "select", label: "Region", options: [{ value: "All", label: "All regions" }, ...REGIONS.map((r) => ({ value: r, label: r }))] },
+        { key: "model", type: "select", label: "Model", options: [{ value: "All", label: "All models" }, ...MODELS.map((m) => ({ value: m.name, label: m.name }))] },
+      ], (state) => { region = state.region; model = state.model; render(); });
+      toolbar.append(bar.el);
+      toolbar.append(
+        toolbarButtons({
+          onRegenerate: () => { seed = Math.floor(Math.random() * 1e8); generate(); render(); },
+          onExport: () => {
+            downloadCSV("booking-delivery",
+              ["Booking", "Booked date", "Model", "Region", "Dealer", "Status", "Lead time", "OTIF"],
+              filtered().map((b) => ({ "Booking": b.id, "Booked date": fmtDate(b.bookingDate), "Model": b.model, "Region": b.region, "Dealer": b.dealer, "Status": b.delivered ? "Delivered" : "Pending", "Lead time": b.leadTime == null ? "" : b.leadTime, "OTIF": b.delivered ? (b.onTime ? "On-time" : "Late") : "Pending" })));
+          },
+        })
+      );
+    }
+
+    generate();
+    setupToolbar();
+    render();
+  </script>
+</body>
+</html>

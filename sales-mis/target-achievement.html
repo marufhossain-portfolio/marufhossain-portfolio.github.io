@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Target vs Achievement</title>
+  <meta name="description" content="Daily/monthly sales target vs actual, achievement % and where the gap comes from (region / model / dealer)." />
+  <meta name="theme-color" content="#05060d" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/design-system.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <script type="module">
+    import { renderShell, el, kpiCards, insights, calcSection, card, fmt, pctStr, color, rag, ragColor, pill, toolbarButtons, dataTable, downloadCSV, filterBar, makeRng, addDays, fmtDate, fmtDateShort, lineChart, barChart } from "./shared/bundle.js";
+    import { REGIONS, MODELS, DEALERS } from "./data/constants.js";
+
+    const shell = renderShell({
+      category: "Sales",
+      kicker: "Sales & Distribution",
+      title: "Target vs Achievement",
+      description: "Daily/monthly sales target vs actual, achievement % and where the gap comes from (region / model / dealer).",
+    });
+    const { main, toolbar } = shell;
+
+    const DAYS = 30;
+    let seed = 20241001;
+    let regionFilter = "";
+    let modelFilter = "";
+    const charts = [];
+
+    const regionTargets = {};
+    const modelTargets = {};
+
+    function generate() {
+      const rng = makeRng(seed);
+      REGIONS.forEach((r) => { regionTargets[r] = rng.int(120, 240); });
+      MODELS.forEach((m) => { modelTargets[m.id] = rng.int(80, 200); });
+
+      const regionActual = {};
+      REGIONS.forEach((r) => { regionActual[r] = Math.round(regionTargets[r] * rng.float(0.72, 1.15)); });
+      const modelActual = {};
+      MODELS.forEach((m) => { modelActual[m.id] = Math.round(modelTargets[m.id] * rng.float(0.7, 1.2)); });
+
+      const daily = [];
+      let cumTarget = 0;
+      let cumActual = 0;
+      const totalTarget = REGIONS.reduce((a, r) => a + regionTargets[r], 0);
+      const totalActual = REGIONS.reduce((a, r) => a + regionActual[r], 0);
+      const start = addDays(new Date(2024, 8, 1), 0);
+      for (let d = 0; d < DAYS; d++) {
+        const tgt = Math.round(totalTarget / DAYS);
+        const act = Math.round(totalActual / DAYS * rng.float(0.6, 1.4));
+        cumTarget += tgt;
+        cumActual += act;
+        daily.push({ date: addDays(start, d), target: cumTarget, actual: cumActual });
+      }
+
+      return { regionActual, modelActual, daily, totalTarget, totalActual };
+    }
+
+    let data = generate();
+
+    function compute() {
+      const regions = REGIONS.map((r) => {
+        const target = regionTargets[r];
+        const actual = data.regionActual[r];
+        const variance = actual - target;
+        const achievement = target ? (actual / target) * 100 : 0;
+        return { region: r, target, actual, variance, achievement };
+      }).filter((x) => !regionFilter || x.region === regionFilter);
+
+      const models = MODELS.map((m) => {
+        const target = modelTargets[m.id];
+        const actual = data.modelActual[m.id];
+        const achievement = target ? (actual / target) * 100 : 0;
+        return { name: m.name, id: m.id, target, actual, variance: actual - target, achievement };
+      }).filter((x) => !modelFilter || x.id === modelFilter);
+
+      const totalTarget = regions.reduce((a, r) => a + r.target, 0);
+      const totalActual = regions.reduce((a, r) => a + r.actual, 0);
+      const achievement = totalTarget ? (totalActual / totalTarget) * 100 : 0;
+      const gap = totalTarget - totalActual;
+      const below = regions.filter((r) => r.actual < r.target).length;
+
+      const worst = regions.slice().sort((a, b) => a.variance - b.variance)[0];
+
+      return { regions, models, totalTarget, totalActual, achievement, gap, below, worst };
+    }
+
+    function newChart(tall) {
+      const canvas = el("canvas");
+      const box = el("div", { class: "chart-box" + (tall ? " tall" : "") }, canvas);
+      return { box, canvas };
+    }
+    function add(c) { charts.push(c); return c; }
+
+    function render() {
+      charts.forEach((c) => c.destroy());
+      charts.length = 0;
+      const c = compute();
+
+      main.innerHTML = "";
+      main.append(
+        kpiCards([
+          { label: "MTD achievement", value: pctStr(c.achievement, 1), sub: "actual ÷ target", status: rag("achievement", c.achievement) },
+          { label: "Gap (units)", value: fmt(c.gap), sub: "shortfall vs target", status: c.gap > 0 ? "bad" : "good" },
+          { label: "Revenue vs budget", value: pctStr(c.achievement, 1), sub: "same as unit achievement", status: rag("revenue", c.achievement) },
+          { label: "Below-target regions", value: c.below + " / " + c.regions.length, sub: "regions missing target", status: c.below > 0 ? "warn" : "good" },
+        ]),
+        filterBar([
+          { type: "select", key: "region", label: "Region", options: [{ value: "", label: "All regions" }, ...REGIONS.map((r) => ({ value: r, label: r }))] },
+          { type: "select", key: "model", label: "Model", options: [{ value: "", label: "All models" }, ...MODELS.map((m) => ({ value: m.id, label: m.name }))] },
+        ], (state) => {
+          regionFilter = state.region;
+          modelFilter = state.model;
+          render();
+        }).el,
+        el("div", { class: "grid cols-2" },
+          card("Target vs actual by region", "", (() => {
+            const { box, canvas } = newChart(true);
+            add(barChart(canvas, {
+              labels: c.regions.map((r) => r.region),
+              datasets: [
+                { label: "Target", data: c.regions.map((r) => r.target) },
+                { label: "Actual", data: c.regions.map((r) => r.actual) },
+              ],
+              yTitle: "Units",
+            }));
+            return box;
+          })()),
+          card("Daily cumulative target vs actual", "", (() => {
+            const { box, canvas } = newChart(true);
+            add(lineChart(canvas, {
+              labels: data.daily.map((d) => fmtDateShort(d.date)),
+              datasets: [
+                { label: "Cumulative target", data: data.daily.map((d) => d.target) },
+                { label: "Cumulative actual", data: data.daily.map((d) => d.actual) },
+              ],
+              yTitle: "Units (cumulative)",
+            }));
+            return box;
+          })())
+        ),
+        el("div", { class: "grid cols-2" },
+          card("Achievement % by model", "", (() => {
+            const { box, canvas } = newChart(true);
+            add(barChart(canvas, {
+              labels: c.models.map((m) => m.name),
+              datasets: [{
+                label: "Achievement %",
+                data: c.models.map((m) => +m.achievement.toFixed(1)),
+                backgroundColor: c.models.map((m) => ragColor("achievement", m.achievement)),
+              }],
+              yTitle: "Achievement %",
+            }));
+            return box;
+          })()),
+          card("Achievement % by region", "", (() => {
+            const { box, canvas } = newChart(true);
+            add(barChart(canvas, {
+              labels: c.regions.map((r) => r.region),
+              datasets: [{
+                label: "Achievement %",
+                data: c.regions.map((r) => +r.achievement.toFixed(1)),
+                backgroundColor: c.regions.map((r) => ragColor("achievement", r.achievement)),
+              }],
+              yTitle: "Achievement %",
+            }));
+            return box;
+          })())
+        ),
+        el("h3", { style: "margin:18px 0 10px" }, "Region target vs actual"),
+        dataTable(
+          [
+            { label: "Region", key: "region" },
+            { label: "Target", key: "target", align: "right", render: (r) => fmt(r.target) },
+            { label: "Actual", key: "actual", align: "right", render: (r) => fmt(r.actual) },
+            { label: "Variance", key: "variance", align: "right", render: (r) => (r.variance >= 0 ? "+" : "") + fmt(r.variance) },
+            { label: "Achievement", key: "achievement", align: "right", render: (r) => pctStr(r.achievement, 1) },
+            { label: "Status", key: "achievement", render: (r) => pill(rag("achievement", r.achievement), r.variance >= 0 ? "On/Above" : "Below") },
+          ],
+          c.regions
+        ),
+        insights([
+          "Biggest negative gap is <b>" + c.worst.region + "</b> at <b>" + fmt(Math.abs(c.worst.variance)) + " units</b> short (" + pctStr(c.worst.achievement, 1) + " of target).",
+          "Overall MTD achievement is <b>" + pctStr(c.achievement, 1) + "</b> — " + (c.gap > 0 ? "tracking <b>below</b> target by " + fmt(c.gap) + " units." : "<b>on or above</b> target."),
+          c.below + " of " + c.regions.length + " regions are below target; focus recovery on " + c.worst.region + ".",
+        ]),
+        calcSection("How it's calculated", [
+          "Achievement % = actual ÷ target × 100",
+          "Variance (units) = actual − target",
+          "Gap = Σ target − Σ actual (positive = shortfall)",
+          "Below-target regions = count of regions where actual < target",
+        ], [
+          "Targets are monthly unit targets per region and per model.",
+          "Achievement ≥ 100% is green, 90–99% amber, < 90% red.",
+        ])
+      );
+    }
+
+    function setupToolbar() {
+      toolbar.append(
+        toolbarButtons({
+          onRegenerate: () => { seed = Math.floor(Math.random() * 1e8); data = generate(); regionFilter = ""; modelFilter = ""; render(); },
+          onExport: () => {
+            const c = compute();
+            downloadCSV("target-achievement", ["Region", "Target", "Actual", "Variance", "Achievement %"], c.regions.map((r) => ({ "Region": r.region, "Target": r.target, "Actual": r.actual, "Variance": r.variance, "Achievement %": r.achievement.toFixed(1) })));
+          },
+        })
+      );
+    }
+
+    setupToolbar();
+    render();
+  </script>
+</body>
+</html>

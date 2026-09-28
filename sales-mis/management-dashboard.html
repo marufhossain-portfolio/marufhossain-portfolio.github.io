@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Management Dashboard — Sales & Distribution MIS</title>
+  <meta name="description" content="Consolidated weekly/monthly view — revenue, units, target, MoM/YoY trend, variance and exception highlights." />
+  <meta name="theme-color" content="#05060d" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/design-system.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <script type="module">
+    import { renderShell, el, kpiCards, insights, calcSection, card, fmt, pctStr, make, lineChart, barChart, color, rag, pill, toolbarButtons, dataTable, downloadCSV, makeRng } from "./shared/bundle.js";
+    import { MONTHS, DEALERS, REGIONS } from "./data/constants.js";
+
+    const shell = renderShell({
+      category: "Management",
+      kicker: "Management & Data",
+      title: "Management Dashboard",
+      description: "Consolidated weekly/monthly view — revenue, units, target, MoM/YoY trend, variance and exception highlights.",
+    });
+    const { main, toolbar } = shell;
+
+    const SEASONAL = [1.02, 1.05, 1.00, 0.97, 0.95, 1.08, 1.10, 1.00, 0.98, 1.00, 1.03, 1.12];
+    const AVG_TICKET = 2_820_000;
+
+    let seed = 20240901;
+    let data = null;
+    const charts = [];
+
+    function generate() {
+      const rng = makeRng(seed);
+      const cur = [];
+      const prev = [];
+      for (let m = 0; m < 12; m++) {
+        const target = Math.round(rng.norm(430, 30) * SEASONAL[m]);
+        const ach = rng.norm(0.96, 0.11);
+        const units = Math.max(0, Math.round(target * ach));
+        const revenue = Math.round(units * rng.norm(AVG_TICKET, 120_000));
+        cur.push({ target, units, revenue });
+        const pUnits = Math.max(0, Math.round(units * rng.norm(0.93, 0.06)));
+        prev.push({ target: Math.round(target * 0.94), units: pUnits, revenue: Math.round(pUnits * rng.norm(AVG_TICKET, 120_000)) });
+      }
+      const dealers = DEALERS.map((d) => ({ name: d.name, region: d.region, ach: rng.norm(96, 20) }));
+      const regions = REGIONS.map((r) => ({ name: r, ach: rng.norm(98, 16) }));
+      const deptKpis = [
+        { dept: "Sales", metric: "Revenue (৳)", value: cur[11].revenue },
+        { dept: "Finance", metric: "Margin (%)", value: rng.norm(11.5, 3) },
+        { dept: "Inventory", metric: "Stock value (৳)", value: rng.norm(620_000_000, 80_000_000) },
+        { dept: "Service", metric: "Jobs (#)", value: rng.norm(850, 120) },
+      ];
+      return { cur, prev, dealers, regions, deptKpis, overAged: rng.int(20, 60) };
+    }
+
+    function compute() {
+      const rev = data.cur.map((c) => c.revenue);
+      const revMTD = rev[11];
+      const unitsMTD = data.cur[11].units;
+      const targetMTD = data.cur[11].target;
+      const achievement = (unitsMTD / targetMTD) * 100;
+      const yoy = ((revMTD - data.prev[11].revenue) / data.prev[11].revenue) * 100;
+
+      const mom = [];
+      for (let i = 0; i < 12; i++) {
+        mom.push(i === 0 ? null : ((rev[i] - rev[i - 1]) / rev[i - 1]) * 100);
+      }
+
+      const exceptions = [];
+      mom.forEach((m, i) => {
+        if (m != null && m < -8) exceptions.push({ sev: "bad", text: "Revenue dropped " + pctStr(m) + " MoM in " + MONTHS[i] + "." });
+      });
+      const worstRegion = data.regions.reduce((a, b) => (a.ach < b.ach ? a : b));
+      if (worstRegion.ach < 90) exceptions.push({ sev: "bad", text: "Region " + worstRegion.name + " below target by " + pctStr(100 - worstRegion.ach) + " (achievement " + pctStr(worstRegion.ach) + ")." });
+      const worstDealer = data.dealers.reduce((a, b) => (a.ach < b.ach ? a : b));
+      if (worstDealer.ach < 80) exceptions.push({ sev: "bad", text: "Dealer " + worstDealer.name + " achievement " + pctStr(worstDealer.ach) + " — flag for review." });
+      if (data.overAged >= 40) exceptions.push({ sev: "warn", text: "Over-aged stock at " + data.overAged + " units — liquidate or reprice." });
+      const minAchMonth = data.cur.map((c) => (c.units / c.target) * 100);
+      const minIdx = minAchMonth.reduce((a, b, i, arr) => (b < arr[a] ? i : a), 0);
+      if (minAchMonth[minIdx] < 85) exceptions.push({ sev: "warn", text: "Achievement low in " + MONTHS[minIdx] + " at " + pctStr(minAchMonth[minIdx]) + "." });
+      if (!exceptions.length) exceptions.push({ sev: "good", text: "No material exceptions detected this period." });
+
+      return { rev, revMTD, unitsMTD, targetMTD, achievement, yoy, mom, exceptions, minAchMonth };
+    }
+
+    function newChart(h) {
+      const canvas = el("canvas");
+      const box = el("div", { class: "chart-box" + (h ? " tall" : "") }, canvas);
+      return { box, canvas };
+    }
+    function add(c) { charts.push(c); return c; }
+
+    function render() {
+      charts.forEach((c) => c.destroy());
+      charts.length = 0;
+      const c = compute();
+      const rev = c.rev;
+
+      const targetRev = data.cur.map((m) => m.target * AVG_TICKET);
+
+      const waterData = [[0, rev[0]]];
+      const waterColor = [color(1)];
+      for (let i = 1; i < 12; i++) {
+        if (rev[i] >= rev[i - 1]) { waterData.push([rev[i - 1], rev[i]]); waterColor.push(color(3)); }
+        else { waterData.push([rev[i], rev[i - 1]]); waterColor.push("#f87171"); }
+      }
+
+      const deptLabels = data.deptKpis.map((d) => d.dept);
+      const deptValues = data.deptKpis.map((d) => Math.round(d.value));
+
+      main.innerHTML = "";
+      main.append(
+        kpiCards([
+          { label: "Revenue MTD", value: "৳" + fmt(c.revMTD), sub: MONTHS[11] + " actual", status: rag("revenue", 100) },
+          { label: "Units MTD", value: fmt(c.unitsMTD), sub: "target " + fmt(c.targetMTD), status: "good" },
+          { label: "Achievement", value: pctStr(c.achievement), sub: "units ÷ target", status: rag("achievement", c.achievement) },
+          { label: "YoY growth", value: (c.yoy >= 0 ? "+" : "") + pctStr(c.yoy), sub: "vs prior year", status: rag("growth", c.yoy) },
+        ]),
+        el("div", { class: "grid cols-2" },
+          card("Monthly revenue trend (with target)", "", (() => {
+            const { box, canvas } = newChart(true);
+            add(lineChart(canvas, {
+              labels: MONTHS,
+              datasets: [
+                { label: "Revenue", data: rev },
+                { label: "Target revenue", data: targetRev, color: "#fbbf24", fill: false },
+              ],
+              yTitle: "৳",
+            }));
+            return box;
+          })()),
+          card("Units vs target", "", (() => {
+            const { box, canvas } = newChart(true);
+            add(barChart(canvas, {
+              labels: MONTHS,
+              datasets: [
+                { label: "Units sold", data: data.cur.map((m) => m.units) },
+                { label: "Target", data: data.cur.map((m) => m.target), color: "#fbbf24" },
+              ],
+              yTitle: "Units",
+            }));
+            return box;
+          })())
+        ),
+        el("div", { class: "grid cols-2" },
+          card("MoM revenue variance (waterfall)", "", (() => {
+            const { box, canvas } = newChart(true);
+            add(make(canvas, {
+              type: "bar",
+              data: {
+                labels: MONTHS,
+                datasets: [{ label: "MoM change", data: waterData, backgroundColor: waterColor, borderRadius: 4, borderWidth: 0 }],
+              },
+              options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => { const d = ctx.raw; return "৳" + fmt(d[0]) + " → ৳" + fmt(d[1]); } } } },
+                scales: { x: { grid: { display: false } }, y: { beginAtZero: true, title: { display: true, text: "৳" } } },
+              },
+            }));
+            return box;
+          })()),
+          card("Department KPI snapshot", "", (() => {
+            const { box, canvas } = newChart(true);
+            add(barChart(canvas, { labels: deptLabels, datasets: [{ label: "Key metric", data: deptValues }], yTitle: "Value (mixed units)" }));
+            return el("div", {},
+              box,
+              el("div", { style: "margin-top:10px;font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:10px" },
+                ...data.deptKpis.map((d) => el("span", {}, d.dept + ": " + (d.metric.includes("৳") ? "৳" + fmt(d.value) : d.metric.includes("%") ? pctStr(d.value) : fmt(d.value))))
+              )
+            );
+          })())
+        ),
+        card("Exception report", "", (() => {
+          const list = el("div", { class: "exceptions", style: "display:flex;flex-direction:column;gap:8px" });
+          for (const e of c.exceptions) {
+            list.append(el("div", { class: "exc " + e.sev, style: "display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg-2)" },
+              el("span", { class: "rag-dot", style: "background:var(--" + (e.sev === "good" ? "good" : e.sev === "warn" ? "warn" : "bad") + ")" }),
+              el("span", {}, e.text)
+            ));
+          }
+          return list;
+        })()),
+        dataTable(
+          [
+            "Month",
+            { label: "Revenue", key: "revenue", align: "right", render: (r) => "৳" + fmt(r.revenue) },
+            { label: "Units", key: "units", align: "right", render: (r) => fmt(r.units) },
+            { label: "Target", key: "target", align: "right", render: (r) => fmt(r.target) },
+            { label: "Achievement", key: "ach", align: "right", render: (r) => pctStr(r.ach) },
+            { label: "MoM %", key: "mom", align: "right", render: (r) => (r.mom == null ? "—" : (r.mom >= 0 ? "+" : "") + pctStr(r.mom)) },
+            { label: "Status", key: "ach", render: (r) => pill(rag("achievement", r.ach), rag("achievement", r.ach) === "good" ? "On track" : rag("achievement", r.ach) === "warn" ? "Watch" : "At risk") },
+          ],
+          MONTHS.map((m, i) => ({ month: m, revenue: data.cur[i].revenue, units: data.cur[i].units, target: data.cur[i].target, ach: (data.cur[i].units / data.cur[i].target) * 100, mom: c.mom[i] }))
+        ),
+        insights([
+          "Revenue MTD is <b>৳" + fmt(c.revMTD) + "</b> with <b>" + pctStr(c.achievement) + "</b> achievement against target — " + (c.achievement >= 100 ? "ahead of plan." : c.achievement >= 90 ? "close to plan." : "<b>below plan</b>; review the exception report."),
+          "YoY revenue is <b>" + (c.yoy >= 0 ? "+" : "") + pctStr(c.yoy) + "</b> vs prior year, signalling " + (c.yoy >= 10 ? "strong expansion." : c.yoy >= 0 ? "modest growth." : "a contraction to investigate."),
+          "Largest MoM swing this year: <b>" + pctStr(Math.max(...c.mom.slice(1).map(Math.abs)), 0) + "</b> — " + (c.exceptions.length ? "see " + c.exceptions.length + " exception(s) highlighted above." : "no material exceptions."),
+          "Worst dealer is <b>" + data.dealers.reduce((a, b) => (a.ach < b.ach ? a : b)).name + "</b> at " + pctStr(data.dealers.reduce((a, b) => (a.ach < b.ach ? a : b)).ach) + " achievement.",
+        ]),
+        calcSection("How it's calculated", [
+          "MoM % = (this month − last month) ÷ last month × 100",
+          "YoY % = (this year − previous year) ÷ previous year × 100",
+          "Achievement % = units sold ÷ target units × 100",
+          "Target revenue = target units × average ticket price",
+        ], [
+          "Waterfall bars span [previous, current] revenue; red spans indicate a month-over-month decline.",
+          "Exception rules: MoM drop > 8%, achievement < 85%, region below target by > 10 pp, dealer < 80%, over-aged stock ≥ 40 units.",
+        ])
+      );
+    }
+
+    function setupToolbar() {
+      toolbar.append(
+        toolbarButtons({
+          onRegenerate: () => { seed = Math.floor(Math.random() * 1e8); data = generate(); render(); },
+          onExport: () => {
+            const c = compute();
+            downloadCSV("management-dashboard", ["Month", "Revenue", "Units", "Target", "Achievement %", "MoM %"], MONTHS.map((m, i) => ({ "Month": m, "Revenue": data.cur[i].revenue, "Units": data.cur[i].units, "Target": data.cur[i].target, "Achievement %": ((data.cur[i].units / data.cur[i].target) * 100).toFixed(1), "MoM %": c.mom[i] == null ? "" : c.mom[i].toFixed(1) })));
+          },
+        })
+      );
+    }
+
+    data = generate();
+    setupToolbar();
+    render();
+  </script>
+</body>
+</html>
