@@ -759,6 +759,7 @@ footer .flinks a:hover { color: var(--c3); }
   margin-bottom: 15px;
   background: var(--grad); background-size: 160% auto;
   color: #05060d;
+  font-size: 26px; line-height: 1;
   box-shadow: 0 14px 30px -18px var(--c1);
 }
 .sys .ic svg { width: 26px; height: 26px; }
