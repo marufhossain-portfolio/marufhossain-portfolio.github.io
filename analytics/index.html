@@ -74,39 +74,17 @@ button { font-family:inherit; cursor:pointer; }
 [data-theme="light"] .theme-toggle .icon-sun { display:none; }
 [data-theme="light"] .theme-toggle .icon-moon { display:block; }
 
-/* ===== TAB BAR ===== */
-.tabbar { flex:none; display:flex; gap:7px; padding:11px 16px; border-bottom:1px solid var(--border); overflow-x:auto; background:color-mix(in srgb,var(--bg2) 60%,transparent); }
+/* ===== TAB BAR (wraps, no scroll) ===== */
+.tabbar { flex:none; display:flex; flex-wrap:wrap; gap:7px; padding:11px 16px; border-bottom:1px solid var(--border); background:color-mix(in srgb,var(--bg2) 60%,transparent); }
 .tab {
-  flex:none; padding:7px 15px; border-radius:9px; border:1px solid var(--border);
+  padding:7px 15px; border-radius:9px; border:1px solid var(--border);
   background:var(--panel); color:var(--muted); font-size:12.5px; font-weight:600; white-space:nowrap; transition:.16s;
 }
 .tab:hover { color:var(--text); border-color:var(--c3); }
 .tab.active { background:var(--grad); color:#05060d; border-color:transparent; font-weight:700; }
 
 .content { flex:1; position:relative; overflow:hidden; background:var(--bg); }
-#frame { position:absolute; inset:0; width:100%; height:100%; border:0; display:none; }
-
-/* ===== OVERVIEW ===== */
-.overview { position:absolute; inset:0; overflow-y:auto; padding:36px clamp(20px,5vw,56px) 60px; }
-.ov-badge { display:inline-flex; align-items:center; gap:8px; padding:7px 14px; border-radius:999px; background:color-mix(in srgb,var(--c3) 12%,transparent); border:1px solid color-mix(in srgb,var(--c3) 32%,transparent); color:var(--c3); font-size:11.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
-.ov h1 { font-family:"Sora",sans-serif; font-size:clamp(28px,5vw,46px); font-weight:800; letter-spacing:-.02em; line-height:1.1; margin:16px 0 12px; }
-.ov h1 .grad { background:var(--grad); -webkit-background-clip:text; background-clip:text; color:transparent; }
-.ov .sub { color:var(--muted); font-size:16px; max-width:760px; line-height:1.7; }
-.ov-stats { display:flex; flex-wrap:wrap; gap:14px; margin:28px 0; }
-.ov-stat { padding:14px 22px; border-radius:14px; background:var(--panel); border:1px solid var(--border); min-width:130px; }
-.ov-stat b { display:block; font-family:"Sora",sans-serif; font-size:26px; font-weight:800; background:var(--grad); -webkit-background-clip:text; background-clip:text; color:transparent; }
-.ov-stat span { font-size:11.5px; color:var(--muted); letter-spacing:.06em; text-transform:uppercase; font-weight:600; }
-.ov-suites { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:18px; }
-.suite { padding:24px; border-radius:18px; background:var(--panel); border:1px solid var(--border); cursor:pointer; transition:transform .25s, border-color .25s, box-shadow .25s; position:relative; overflow:hidden; }
-.suite:hover { transform:translateY(-5px); border-color:color-mix(in srgb,var(--c3) 55%,var(--border)); box-shadow:0 24px 50px -30px var(--c3); }
-.suite::before { content:""; position:absolute; inset:0 0 auto 0; height:3px; background:var(--grad); }
-.suite .ic { font-size:26px; margin-bottom:14px; }
-.suite h3 { font-family:"Sora",sans-serif; font-size:18px; margin-bottom:8px; }
-.suite p { color:var(--muted); font-size:13.5px; line-height:1.6; }
-.suite .meta { margin-top:16px; display:flex; gap:14px; font-size:12px; color:var(--faint); font-weight:600; }
-.suite .meta b { color:var(--c3); }
-.sample-note { margin-top:28px; padding:14px 18px; border-radius:14px; border:1px solid color-mix(in srgb,var(--warn) 35%,var(--border)); background:color-mix(in srgb,var(--warn) 7%,transparent); color:var(--muted); font-size:13px; display:flex; gap:10px; align-items:flex-start; }
-.sample-note b { color:var(--warn); }
+#frame { position:absolute; inset:0; width:100%; height:100%; border:0; }
 
 .sidebar-overlay { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:35; opacity:0; pointer-events:none; transition:.25s; }
 
@@ -136,7 +114,7 @@ button { font-family:inherit; cursor:pointer; }
   <main class="main">
     <header class="topbar">
       <button class="burger" id="burger" aria-label="Menu"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
-      <div class="crumb" id="crumb">Overview</div>
+      <div class="crumb" id="crumb">CEO Overview</div>
       <div class="top-right">
         <span class="demo-pill">SAMPLE DATA</span>
         <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
@@ -148,22 +126,6 @@ button { font-family:inherit; cursor:pointer; }
     <div class="tabbar" id="tabbar" style="display:none"></div>
     <div class="content" id="content">
       <iframe id="frame" title="Dashboard"></iframe>
-      <div class="overview" id="overview">
-        <div class="ov-badge">30+ interactive dashboards</div>
-        <h1>Analytics that turn <span class="grad">data into decisions</span></h1>
-        <div class="sub">One platform for manufacturing analytics, sales &amp; distribution MIS and executive BI — every chart, KPI and table built to industrial-engineering standards, with the formulas shown.</div>
-        <div class="ov-stats">
-          <div class="ov-stat"><b>30+</b><span>Dashboards</span></div>
-          <div class="ov-stat"><b>3</b><span>Suites</span></div>
-          <div class="ov-stat"><b>100%</b><span>Sample data</span></div>
-          <div class="ov-stat"><b>RAG</b><span>Red·Amber·Green</span></div>
-        </div>
-        <div class="ov-suites" id="suites"></div>
-        <div class="sample-note">
-          <span>⚠</span>
-          <span><b>Sample data for demonstration.</b> Every number, SKU, dealer, model and score across this platform is realistic but synthetic — no real company or production data is published. Choose a suite from the sidebar to explore.</span>
-        </div>
-      </div>
     </div>
   </main>
 </div>
@@ -172,6 +134,8 @@ button { font-family:inherit; cursor:pointer; }
 <script>
 (function(){
 "use strict";
+var CEO = { name:"CEO Overview", icon:"💼", url:"/opex-dashboards/#ceo" };
+
 var SUITES = [
   { id:"manufacturing", name:"Manufacturing Analytics", icon:"🏭", items:[
     { t:"Line Balancing Simulator", u:"/dashboards/line-balancing.html" },
@@ -201,7 +165,6 @@ var SUITES = [
     { t:"Data Quality & Validation", u:"/sales-mis/data-quality.html" }
   ]},
   { id:"opex", name:"OPEX BI", icon:"📈", items:[
-    { t:"CEO Overview", u:"/opex-dashboards/#ceo" },
     { t:"Production Dashboard", u:"/opex-dashboards/#production" },
     { t:"Maintenance Analysis", u:"/opex-dashboards/#maintenance" },
     { t:"Delivery Analysis", u:"/opex-dashboards/#delivery" },
@@ -212,45 +175,41 @@ var SUITES = [
 ];
 
 var $ = function(id){ return document.getElementById(id); };
-var nav = $("nav"), frame = $("frame"), overview = $("overview"), crumb = $("crumb");
-var tabbar = $("tabbar"), suites = $("suites");
-var activeSuite = null, activeTab = null;
+var nav = $("nav"), frame = $("frame"), crumb = $("crumb"), tabbar = $("tabbar");
+var current = "ceo";
 
 function renderNav(){
-  nav.innerHTML = '<div class="nav-label">Navigate</div>';
-  var home = document.createElement("button");
-  home.className = "nav-item" + (activeSuite === null ? " active" : "");
-  home.innerHTML = '<span class="ic">🏠</span>Overview';
-  home.addEventListener("click", showOverview);
-  nav.appendChild(home);
+  nav.innerHTML = '<div class="nav-label">Dashboards</div>';
+  var ceoBtn = document.createElement("button");
+  ceoBtn.className = "nav-item" + (current === "ceo" ? " active" : "");
+  ceoBtn.innerHTML = '<span class="ic">' + CEO.icon + '</span>' + CEO.name;
+  ceoBtn.addEventListener("click", openCeo);
+  nav.appendChild(ceoBtn);
   SUITES.forEach(function(s){
     var b = document.createElement("button");
-    b.className = "nav-item" + (activeSuite === s.id ? " active" : "");
+    b.className = "nav-item" + (current === s.id ? " active" : "");
     b.innerHTML = '<span class="ic">' + s.icon + '</span>' + s.name + '<span class="cnt">' + s.items.length + '</span>';
     b.addEventListener("click", function(){ openSuite(s.id); });
     nav.appendChild(b);
   });
 }
 
-function renderSuites(){
-  suites.innerHTML = "";
-  SUITES.forEach(function(s){
-    var el = document.createElement("div");
-    el.className = "suite";
-    el.innerHTML = '<div class="ic">' + s.icon + '</div><h3>' + s.name + '</h3><p>' + s.items.map(function(i){ return i.t; }).slice(0,6).join(' · ') + '…</p><div class="meta"><span><b>' + s.items.length + '</b> dashboards</span><span>Open →</span></div>';
-    el.addEventListener("click", function(){ openSuite(s.id); });
-    suites.appendChild(el);
-  });
+function openCeo(){
+  current = "ceo";
+  renderNav();
+  tabbar.style.display = "none";
+  frame.src = CEO.url;
+  frame.style.display = "block";
+  crumb.textContent = "CEO Overview";
+  closeSidebar();
 }
 
 function openSuite(id){
   var s = SUITES.find(function(x){ return x.id === id; });
   if(!s) return;
-  activeSuite = id;
+  current = id;
   renderNav();
-  overview.style.display = "none";
   tabbar.style.display = "flex";
-  // build tabs
   tabbar.innerHTML = "";
   s.items.forEach(function(it){
     var t = document.createElement("button");
@@ -259,30 +218,16 @@ function openSuite(id){
     t.addEventListener("click", function(){ loadTab(s, it, t); });
     tabbar.appendChild(t);
   });
-  // load first tab
-  var first = tabbar.querySelector(".tab");
-  loadTab(s, s.items[0], first);
+  loadTab(s, s.items[0], tabbar.querySelector(".tab"));
   closeSidebar();
 }
 
 function loadTab(s, it, btn){
-  activeTab = it;
   frame.src = it.u;
   frame.style.display = "block";
-  overview.style.display = "none";
   crumb.innerHTML = '<span class="grp">' + s.name + ' · </span>' + it.t;
   tabbar.querySelectorAll(".tab").forEach(function(t){ t.classList.remove("active"); });
   if(btn) btn.classList.add("active");
-}
-
-function showOverview(){
-  activeSuite = null;
-  renderNav();
-  frame.style.display = "none";
-  frame.src = "about:blank";
-  tabbar.style.display = "none";
-  overview.style.display = "block";
-  crumb.textContent = "Overview";
 }
 
 // theme
@@ -302,10 +247,10 @@ function closeSidebar(){ sidebar.classList.remove("open"); overlay.classList.rem
 $("burger").addEventListener("click", function(){ sidebar.classList.add("open"); overlay.classList.add("show"); });
 overlay.addEventListener("click", closeSidebar);
 
-document.querySelector(".brand").addEventListener("click", showOverview);
+document.querySelector(".brand").addEventListener("click", openCeo);
 
 renderNav();
-renderSuites();
+openCeo();
 })();
 </script>
 </body>
