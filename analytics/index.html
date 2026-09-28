@@ -15,7 +15,7 @@
   --border:#1c2840; --text:#eaf0fb; --muted:#8b98b5; --faint:#5b6a88;
   --c1:#6366f1; --c2:#a855f7; --c3:#22d3ee; --c4:#34d399; --warn:#fbbf24;
   --grad:linear-gradient(120deg,var(--c1),var(--c2) 45%,var(--c3));
-  --sbw:280px;
+  --sbw:250px;
 }
 [data-theme="light"] {
   --bg:#f4f7ff; --bg2:#ffffff; --panel:#ffffff; --panel2:#eef2ff;
@@ -36,42 +36,24 @@ button { font-family:inherit; cursor:pointer; }
 .sidebar {
   width:var(--sbw); flex:none; height:100vh; overflow-y:auto;
   background:linear-gradient(180deg,var(--bg2),var(--bg));
-  border-right:1px solid var(--border);
-  display:flex; flex-direction:column; position:relative; z-index:40;
+  border-right:1px solid var(--border); display:flex; flex-direction:column; z-index:40;
 }
 .brand { display:flex; align-items:center; gap:12px; padding:20px 18px 16px; }
-.brand-logo {
-  width:40px; height:40px; border-radius:12px; display:grid; place-items:center;
-  background:var(--grad); color:#05060d; font-family:"Sora",sans-serif; font-weight:800; font-size:15px;
-  box-shadow:0 0 26px -6px var(--c1);
-}
+.brand-logo { width:40px; height:40px; border-radius:12px; display:grid; place-items:center; background:var(--grad); color:#05060d; font-family:"Sora",sans-serif; font-weight:800; font-size:15px; box-shadow:0 0 26px -6px var(--c1); }
 .brand-txt { font-family:"Sora",sans-serif; font-weight:700; font-size:15px; line-height:1.15; letter-spacing:-.01em; }
 .brand-txt small { display:block; font-family:"Manrope",sans-serif; font-size:9.5px; letter-spacing:1.5px; color:var(--muted); font-weight:600; }
 
-.search { padding:0 16px 12px; }
-.search input {
-  width:100%; padding:9px 13px; border-radius:10px; border:1px solid var(--border);
-  background:var(--panel); color:var(--text); font-family:inherit; font-size:13px;
-}
-.search input:focus { outline:none; border-color:var(--c3); }
-
-.nav { flex:1; padding:0 10px 10px; }
-.nav-group { margin-bottom:6px; }
-.nav-label {
-  display:flex; align-items:center; justify-content:space-between;
-  padding:12px 12px 7px; font-size:10.5px; font-weight:800; letter-spacing:.12em;
-  text-transform:uppercase; color:var(--muted);
-}
-.nav-label .cnt { font-size:10px; font-weight:700; color:var(--c3); background:color-mix(in srgb,var(--c3) 14%,transparent); border:1px solid color-mix(in srgb,var(--c3) 35%,transparent); padding:1px 8px; border-radius:999px; }
+.nav { flex:1; padding:6px 12px 12px; }
+.nav-label { padding:14px 8px 7px; font-size:10.5px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); }
 .nav-item {
-  display:flex; align-items:center; gap:10px; width:100%; text-align:left;
-  padding:8px 12px; margin:2px 0; border-radius:10px; border:none; background:transparent;
-  color:var(--muted); font-size:13px; font-weight:600; transition:.18s;
+  display:flex; align-items:center; gap:11px; width:100%; text-align:left;
+  padding:11px 13px; margin:2px 0; border-radius:11px; border:none; background:transparent;
+  color:var(--muted); font-size:13.5px; font-weight:600; transition:.18s;
 }
 .nav-item:hover { background:var(--panel); color:var(--text); }
-.nav-item.active { background:color-mix(in srgb,var(--c1) 16%,transparent); color:var(--text); box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c1) 40%,transparent); }
-.nav-item .dot { width:7px; height:7px; border-radius:50%; flex:none; background:var(--c3); }
-.nav-item:hover .dot, .nav-item.active .dot { background:var(--c1); }
+.nav-item.active { background:color-mix(in srgb,var(--c1) 18%,transparent); color:var(--text); box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c1) 42%,transparent); }
+.nav-item .ic { font-size:16px; width:22px; flex:none; }
+.nav-item .cnt { margin-left:auto; font-size:10.5px; font-weight:700; color:var(--c3); background:color-mix(in srgb,var(--c3) 14%,transparent); border:1px solid color-mix(in srgb,var(--c3) 35%,transparent); padding:1px 8px; border-radius:999px; }
 
 .side-foot { padding:14px 18px; border-top:1px solid var(--border); }
 .live { display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--muted); }
@@ -81,10 +63,7 @@ button { font-family:inherit; cursor:pointer; }
 
 /* ===== MAIN ===== */
 .main { flex:1; min-width:0; display:flex; flex-direction:column; height:100vh; }
-.topbar {
-  height:56px; flex:none; display:flex; align-items:center; gap:12px;
-  padding:0 18px; border-bottom:1px solid var(--border); background:color-mix(in srgb,var(--bg) 88%,transparent);
-}
+.topbar { height:56px; flex:none; display:flex; align-items:center; gap:12px; padding:0 18px; border-bottom:1px solid var(--border); background:color-mix(in srgb,var(--bg) 88%,transparent); }
 .burger { display:none; width:38px; height:38px; border-radius:10px; border:1px solid var(--border); background:var(--panel); color:var(--text); place-items:center; }
 .crumb { font-family:"Sora",sans-serif; font-weight:700; font-size:14.5px; }
 .crumb .grp { color:var(--faint); font-weight:600; font-size:13px; }
@@ -95,17 +74,21 @@ button { font-family:inherit; cursor:pointer; }
 [data-theme="light"] .theme-toggle .icon-sun { display:none; }
 [data-theme="light"] .theme-toggle .icon-moon { display:block; }
 
+/* ===== TAB BAR ===== */
+.tabbar { flex:none; display:flex; gap:7px; padding:11px 16px; border-bottom:1px solid var(--border); overflow-x:auto; background:color-mix(in srgb,var(--bg2) 60%,transparent); }
+.tab {
+  flex:none; padding:7px 15px; border-radius:9px; border:1px solid var(--border);
+  background:var(--panel); color:var(--muted); font-size:12.5px; font-weight:600; white-space:nowrap; transition:.16s;
+}
+.tab:hover { color:var(--text); border-color:var(--c3); }
+.tab.active { background:var(--grad); color:#05060d; border-color:transparent; font-weight:700; }
+
 .content { flex:1; position:relative; overflow:hidden; background:var(--bg); }
 #frame { position:absolute; inset:0; width:100%; height:100%; border:0; display:none; }
 
 /* ===== OVERVIEW ===== */
 .overview { position:absolute; inset:0; overflow-y:auto; padding:36px clamp(20px,5vw,56px) 60px; }
-.ov-brand { display:flex; align-items:center; gap:12px; margin-bottom:6px; }
-.ov-badge {
-  display:inline-flex; align-items:center; gap:8px; padding:7px 14px; border-radius:999px;
-  background:color-mix(in srgb,var(--c3) 12%,transparent); border:1px solid color-mix(in srgb,var(--c3) 32%,transparent);
-  color:var(--c3); font-size:11.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
-}
+.ov-badge { display:inline-flex; align-items:center; gap:8px; padding:7px 14px; border-radius:999px; background:color-mix(in srgb,var(--c3) 12%,transparent); border:1px solid color-mix(in srgb,var(--c3) 32%,transparent); color:var(--c3); font-size:11.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
 .ov h1 { font-family:"Sora",sans-serif; font-size:clamp(28px,5vw,46px); font-weight:800; letter-spacing:-.02em; line-height:1.1; margin:16px 0 12px; }
 .ov h1 .grad { background:var(--grad); -webkit-background-clip:text; background-clip:text; color:transparent; }
 .ov .sub { color:var(--muted); font-size:16px; max-width:760px; line-height:1.7; }
@@ -113,12 +96,8 @@ button { font-family:inherit; cursor:pointer; }
 .ov-stat { padding:14px 22px; border-radius:14px; background:var(--panel); border:1px solid var(--border); min-width:130px; }
 .ov-stat b { display:block; font-family:"Sora",sans-serif; font-size:26px; font-weight:800; background:var(--grad); -webkit-background-clip:text; background-clip:text; color:transparent; }
 .ov-stat span { font-size:11.5px; color:var(--muted); letter-spacing:.06em; text-transform:uppercase; font-weight:600; }
-
 .ov-suites { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:18px; }
-.suite {
-  padding:24px; border-radius:18px; background:var(--panel); border:1px solid var(--border);
-  cursor:pointer; transition:transform .25s, border-color .25s, box-shadow .25s; position:relative; overflow:hidden;
-}
+.suite { padding:24px; border-radius:18px; background:var(--panel); border:1px solid var(--border); cursor:pointer; transition:transform .25s, border-color .25s, box-shadow .25s; position:relative; overflow:hidden; }
 .suite:hover { transform:translateY(-5px); border-color:color-mix(in srgb,var(--c3) 55%,var(--border)); box-shadow:0 24px 50px -30px var(--c3); }
 .suite::before { content:""; position:absolute; inset:0 0 auto 0; height:3px; background:var(--grad); }
 .suite .ic { font-size:26px; margin-bottom:14px; }
@@ -126,7 +105,6 @@ button { font-family:inherit; cursor:pointer; }
 .suite p { color:var(--muted); font-size:13.5px; line-height:1.6; }
 .suite .meta { margin-top:16px; display:flex; gap:14px; font-size:12px; color:var(--faint); font-weight:600; }
 .suite .meta b { color:var(--c3); }
-
 .sample-note { margin-top:28px; padding:14px 18px; border-radius:14px; border:1px solid color-mix(in srgb,var(--warn) 35%,var(--border)); background:color-mix(in srgb,var(--warn) 7%,transparent); color:var(--muted); font-size:13px; display:flex; gap:10px; align-items:flex-start; }
 .sample-note b { color:var(--warn); }
 
@@ -148,7 +126,6 @@ button { font-family:inherit; cursor:pointer; }
       <div class="brand-logo">M</div>
       <div class="brand-txt">OPEX Intelligence<br><small>SUITE · ANALYTICS</small></div>
     </div>
-    <div class="search"><input id="search" type="text" placeholder="Search dashboards…" /></div>
     <div class="nav" id="nav"></div>
     <div class="side-foot">
       <div class="live"><span class="dot"></span>Demo data — sample &amp; synthetic</div>
@@ -168,6 +145,7 @@ button { font-family:inherit; cursor:pointer; }
         </button>
       </div>
     </header>
+    <div class="tabbar" id="tabbar" style="display:none"></div>
     <div class="content" id="content">
       <iframe id="frame" title="Dashboard"></iframe>
       <div class="overview" id="overview">
@@ -183,7 +161,7 @@ button { font-family:inherit; cursor:pointer; }
         <div class="ov-suites" id="suites"></div>
         <div class="sample-note">
           <span>⚠</span>
-          <span><b>Sample data for demonstration.</b> Every number, SKU, dealer, model and score across this platform is realistic but synthetic — no real company or production data is published. Choose a dashboard from the sidebar to explore.</span>
+          <span><b>Sample data for demonstration.</b> Every number, SKU, dealer, model and score across this platform is realistic but synthetic — no real company or production data is published. Choose a suite from the sidebar to explore.</span>
         </div>
       </div>
     </div>
@@ -194,13 +172,13 @@ button { font-family:inherit; cursor:pointer; }
 <script>
 (function(){
 "use strict";
-var NAV = [
-  { group:"Manufacturing Analytics", icon:"🏭", items:[
+var SUITES = [
+  { id:"manufacturing", name:"Manufacturing Analytics", icon:"🏭", items:[
     { t:"Line Balancing Simulator", u:"/dashboards/line-balancing.html" },
     { t:"Capacity Planning", u:"/dashboards/capacity-planning.html" },
     { t:"Downtime Pareto & Reliability", u:"/dashboards/downtime-reliability.html" },
     { t:"Kaizen / CI Tracker", u:"/dashboards/kaizen-tracker.html" },
-    { t:"Interactive Value Stream Map", u:"/dashboards/value-stream-map.html" },
+    { t:"Value Stream Map", u:"/dashboards/value-stream-map.html" },
     { t:"Time Study Tool", u:"/dashboards/time-study.html" },
     { t:"Production Plan vs Actual", u:"/dashboards/production-plan.html" },
     { t:"Quality & SPC", u:"/dashboards/quality-spc.html" },
@@ -212,17 +190,17 @@ var NAV = [
     { t:"Productivity & Manpower", u:"/dashboards/productivity-manpower.html" },
     { t:"Energy & Utilities", u:"/dashboards/energy.html" }
   ]},
-  { group:"Sales & Distribution", icon:"🚗", items:[
+  { id:"sales", name:"Sales & Distribution", icon:"🚗", items:[
     { t:"Daily Sales MIS", u:"/sales-mis/daily-sales.html" },
     { t:"Target vs Achievement", u:"/sales-mis/target-achievement.html" },
     { t:"Dealer Performance", u:"/sales-mis/dealer-performance.html" },
-    { t:"Sales Funnel & Order Tracking", u:"/sales-mis/sales-funnel.html" },
+    { t:"Sales Funnel & Tracking", u:"/sales-mis/sales-funnel.html" },
     { t:"Booking vs Delivery", u:"/sales-mis/booking-delivery.html" },
     { t:"Vehicle Inventory MIS", u:"/sales-mis/vehicle-inventory.html" },
     { t:"Management Dashboard", u:"/sales-mis/management-dashboard.html" },
     { t:"Data Quality & Validation", u:"/sales-mis/data-quality.html" }
   ]},
-  { group:"OPEX BI", icon:"📈", items:[
+  { id:"opex", name:"OPEX BI", icon:"📈", items:[
     { t:"CEO Overview", u:"/opex-dashboards/#ceo" },
     { t:"Production Dashboard", u:"/opex-dashboards/#production" },
     { t:"Maintenance Analysis", u:"/opex-dashboards/#maintenance" },
@@ -235,71 +213,76 @@ var NAV = [
 
 var $ = function(id){ return document.getElementById(id); };
 var nav = $("nav"), frame = $("frame"), overview = $("overview"), crumb = $("crumb");
-var suites = $("suites");
+var tabbar = $("tabbar"), suites = $("suites");
+var activeSuite = null, activeTab = null;
 
-function renderNav(filter){
-  nav.innerHTML = "";
-  NAV.forEach(function(g){
-    var items = filter ? g.items.filter(function(it){ return it.t.toLowerCase().indexOf(filter) > -1; }) : g.items;
-    if(items.length === 0) return;
-    var wrap = document.createElement("div");
-    wrap.className = "nav-group";
-    var label = document.createElement("div");
-    label.className = "nav-label";
-    label.innerHTML = '<span>' + g.icon + ' ' + g.group + '</span><span class="cnt">' + items.length + '</span>';
-    wrap.appendChild(label);
-    items.forEach(function(it){
-      var b = document.createElement("button");
-      b.className = "nav-item";
-      b.innerHTML = '<span class="dot"></span><span>' + it.t + '</span>';
-      b.addEventListener("click", function(){ open(it); });
-      wrap.appendChild(b);
-    });
-    nav.appendChild(wrap);
+function renderNav(){
+  nav.innerHTML = '<div class="nav-label">Navigate</div>';
+  var home = document.createElement("button");
+  home.className = "nav-item" + (activeSuite === null ? " active" : "");
+  home.innerHTML = '<span class="ic">🏠</span>Overview';
+  home.addEventListener("click", showOverview);
+  nav.appendChild(home);
+  SUITES.forEach(function(s){
+    var b = document.createElement("button");
+    b.className = "nav-item" + (activeSuite === s.id ? " active" : "");
+    b.innerHTML = '<span class="ic">' + s.icon + '</span>' + s.name + '<span class="cnt">' + s.items.length + '</span>';
+    b.addEventListener("click", function(){ openSuite(s.id); });
+    nav.appendChild(b);
   });
 }
 
 function renderSuites(){
-  var data = [
-    { icon:"🏭", t:"Manufacturing Analytics", d:"15 dashboards — Lean / Industrial Engineering, factory departments and executive level. Line balancing, OEE, SPC, Kaizen, capacity, downtime, VSM and time study.", n:15, first:NAV[0].items[0] },
-    { icon:"🚗", t:"Sales & Distribution MIS", d:"8 dashboards — daily sales, target vs achievement, dealer performance, inventory, booking vs delivery, funnel and consolidated management view.", n:8, first:NAV[1].items[0] },
-    { icon:"📈", t:"OPEX BI Dashboards", d:"7 executive BI views — CEO overview, production, maintenance, delivery, planning, quality and 5S.", n:7, first:NAV[2].items[0] }
-  ];
   suites.innerHTML = "";
-  data.forEach(function(s){
+  SUITES.forEach(function(s){
     var el = document.createElement("div");
     el.className = "suite";
-    el.innerHTML = '<div class="ic">' + s.icon + '</div><h3>' + s.t + '</h3><p>' + s.d + '</p><div class="meta"><span><b>' + s.n + '</b> dashboards</span><span>Open →</span></div>';
-    el.addEventListener("click", function(){ open(s.first); });
+    el.innerHTML = '<div class="ic">' + s.icon + '</div><h3>' + s.name + '</h3><p>' + s.items.map(function(i){ return i.t; }).slice(0,6).join(' · ') + '…</p><div class="meta"><span><b>' + s.items.length + '</b> dashboards</span><span>Open →</span></div>';
+    el.addEventListener("click", function(){ openSuite(s.id); });
     suites.appendChild(el);
   });
 }
 
-function open(it){
+function openSuite(id){
+  var s = SUITES.find(function(x){ return x.id === id; });
+  if(!s) return;
+  activeSuite = id;
+  renderNav();
+  overview.style.display = "none";
+  tabbar.style.display = "flex";
+  // build tabs
+  tabbar.innerHTML = "";
+  s.items.forEach(function(it){
+    var t = document.createElement("button");
+    t.className = "tab";
+    t.textContent = it.t;
+    t.addEventListener("click", function(){ loadTab(s, it, t); });
+    tabbar.appendChild(t);
+  });
+  // load first tab
+  var first = tabbar.querySelector(".tab");
+  loadTab(s, s.items[0], first);
+  closeSidebar();
+}
+
+function loadTab(s, it, btn){
+  activeTab = it;
   frame.src = it.u;
   frame.style.display = "block";
   overview.style.display = "none";
-  crumb.innerHTML = '<span class="grp">' + groupOf(it) + ' · </span>' + it.t;
-  highlight(it);
-  closeSidebar();
+  crumb.innerHTML = '<span class="grp">' + s.name + ' · </span>' + it.t;
+  tabbar.querySelectorAll(".tab").forEach(function(t){ t.classList.remove("active"); });
+  if(btn) btn.classList.add("active");
 }
-function groupOf(it){
-  for(var i=0;i<NAV.length;i++){ if(NAV[i].items.indexOf(it) > -1) return NAV[i].group; }
-  return "";
-}
-function highlight(it){
-  var btns = nav.querySelectorAll(".nav-item");
-  btns.forEach(function(b){ b.classList.remove("active"); });
-  // find matching button by text
-  nav.querySelectorAll(".nav-item").forEach(function(b){
-    if(b.textContent.trim() === it.t) b.classList.add("active");
-  });
-}
+
 function showOverview(){
+  activeSuite = null;
+  renderNav();
   frame.style.display = "none";
+  frame.src = "about:blank";
+  tabbar.style.display = "none";
   overview.style.display = "block";
   crumb.textContent = "Overview";
-  nav.querySelectorAll(".nav-item").forEach(function(b){ b.classList.remove("active"); });
 }
 
 // theme
@@ -313,19 +296,15 @@ $("themeToggle").addEventListener("click", function(){
   localStorage.setItem("mmh2-theme", next);
 });
 
-// search
-$("search").addEventListener("input", function(e){ renderNav(e.target.value.trim().toLowerCase()); });
-
 // mobile sidebar
 var sidebar = $("sidebar"), overlay = $("overlay");
 function closeSidebar(){ sidebar.classList.remove("open"); overlay.classList.remove("show"); }
 $("burger").addEventListener("click", function(){ sidebar.classList.add("open"); overlay.classList.add("show"); });
 overlay.addEventListener("click", closeSidebar);
 
-// brand click → overview
 document.querySelector(".brand").addEventListener("click", showOverview);
 
-renderNav("");
+renderNav();
 renderSuites();
 })();
 </script>
