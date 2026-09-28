@@ -772,3 +772,12 @@ footer .flinks a:hover { color: var(--c3); }
 }
 .sys .go svg { width: 15px; height: 15px; transition: transform .3s var(--ease); }
 .sys:hover .go svg { transform: translateX(5px); }
+
+/* Featured dashboards highlight */
+#dashboards .sys { border-color: color-mix(in srgb, var(--c3) 32%, var(--border)); }
+#dashboards .sys::after {
+  content: ""; position: absolute; inset: 0; border-radius: var(--radius);
+  background: radial-gradient(420px circle at 50% 0%, color-mix(in srgb, var(--c1) 14%, transparent), transparent 70%);
+  pointer-events: none; opacity: .6;
+}
+#dashboards .sys .ic { box-shadow: 0 18px 40px -20px var(--c3); }
