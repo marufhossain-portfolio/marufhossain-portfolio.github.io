@@ -380,56 +380,56 @@ button { font-family: inherit; }
 
 /* cinematic entrance — portrait "walks into frame" from the right */
 body.loaded .hero-avatar {
-  animation: walkIn 1.5s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
+  animation: walkIn 1.5s cubic-bezier(0.16, 1, 0.3, 1) 1.2s both;
 }
 @keyframes walkIn {
-  from { opacity: 0; transform: translateX(90px) scale(0.96); }
+  from { opacity: 0; transform: translateX(160px) scale(0.9); }
   to   { opacity: 1; transform: translateX(0) scale(1); }
 }
 
 /* soft ground shadow that scales in alongside the walk-in */
 .hero-shadow {
   position: absolute;
-  bottom: -24px;
+  bottom: -30px;
   left: 50%;
-  width: 150px;
-  height: 20px;
+  width: 200px;
+  height: 28px;
   transform: translateX(-50%);
   border-radius: 50%;
-  background: radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.2) 55%, transparent 72%);
-  filter: blur(6px);
+  background: radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.32) 55%, transparent 75%);
+  filter: blur(5px);
   z-index: -1;
   pointer-events: none;
 }
 body.loaded .hero-shadow {
-  animation: shadowIn 1.5s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
+  animation: shadowIn 1.5s cubic-bezier(0.16, 1, 0.3, 1) 1.2s both;
 }
 @keyframes shadowIn {
-  from { opacity: 0; transform: translateX(-50%) scaleX(0.12); }
+  from { opacity: 0; transform: translateX(-50%) scaleX(0.08); }
   to   { opacity: 1; transform: translateX(-50%) scaleX(1); }
 }
 
-/* soft spotlight above / behind the subject */
+/* spotlight above / behind the subject */
 .hero-spotlight {
   position: absolute;
-  top: -6%;
+  top: -8%;
   left: 50%;
   transform: translateX(-50%);
-  width: min(920px, 94vw);
-  height: 540px;
-  background: radial-gradient(ellipse 50% 46% at 50% 34%, rgba(168, 85, 247, 0.16), rgba(99, 102, 241, 0.1) 46%, transparent 72%);
-  filter: blur(18px);
+  width: min(840px, 96vw);
+  height: 580px;
+  background: radial-gradient(ellipse 50% 46% at 50% 30%, rgba(168, 85, 247, 0.42), rgba(99, 102, 241, 0.22) 48%, transparent 75%);
+  filter: blur(10px);
   pointer-events: none;
   z-index: 1;
-  animation: spotlightBreathe 9s ease-in-out infinite;
+  animation: spotlightBreathe 8s ease-in-out infinite;
 }
-@keyframes spotlightBreathe { 0%, 100% { opacity: 0.75; } 50% { opacity: 1; } }
+@keyframes spotlightBreathe { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
 
-/* low-opacity drifting fog / smoke along the bottom */
+/* drifting fog / smoke along the bottom */
 .hero-fog {
   position: absolute;
   left: 0; right: 0; bottom: 0;
-  height: 260px;
+  height: 300px;
   pointer-events: none;
   z-index: 1;
   overflow: hidden;
@@ -438,15 +438,15 @@ body.loaded .hero-shadow {
   position: absolute;
   bottom: -70px;
   border-radius: 50%;
-  filter: blur(48px);
-  opacity: 0.15;
-  background: radial-gradient(circle, rgba(148, 163, 184, 0.55), transparent 70%);
+  filter: blur(40px);
+  opacity: 0.32;
+  background: radial-gradient(circle, rgba(148, 163, 184, 0.8), transparent 70%);
 }
-.hero-fog span:nth-child(1) { width: 62vw; height: 170px; left: -12%; animation: fogDrift 14s ease-in-out infinite; }
-.hero-fog span:nth-child(2) { width: 56vw; height: 150px; right: -10%; animation: fogDrift2 12s ease-in-out infinite; }
-.hero-fog span:nth-child(3) { width: 50vw; height: 140px; left: 24%; bottom: -80px; animation: fogDrift 16s ease-in-out infinite reverse; }
-@keyframes fogDrift  { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(90px); } }
-@keyframes fogDrift2 { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(-110px); } }
+.hero-fog span:nth-child(1) { width: 62vw; height: 190px; left: -12%; animation: fogDrift 14s ease-in-out infinite; }
+.hero-fog span:nth-child(2) { width: 56vw; height: 170px; right: -10%; animation: fogDrift2 12s ease-in-out infinite; }
+.hero-fog span:nth-child(3) { width: 50vw; height: 155px; left: 24%; bottom: -85px; animation: fogDrift 16s ease-in-out infinite reverse; }
+@keyframes fogDrift  { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(120px); } }
+@keyframes fogDrift2 { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(-140px); } }
 
 .hero h1 {
   font-size: clamp(38px, 8vw, 84px);
