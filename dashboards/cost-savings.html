@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cost & Savings — Manufacturing Analytics</title>
+  <meta name="description" content="Cost per unit, Kaizen savings trend, budget vs actual variance and savings by category." />
+  <meta name="theme-color" content="#05060d" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/design-system.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <script type="module">
+    import { renderShell, el, kpiCards, insights, calcSection, card, fmt, pctStr, color, rag, pill, toolbarButtons, dataTable, downloadCSV, makeRng, lineChart, barChart, doughnutChart } from "./shared/bundle.js";
+    import { WASTE_TYPES, MONTHS } from "./data/constants.js";
+
+    const shell = renderShell({
+      category: "Executive Level",
+      kicker: "Executive Level",
+      title: "Cost & Savings",
+      description: "Cost per unit, Kaizen savings trend, budget vs actual variance and savings by category.",
+    });
+    const { main, toolbar } = shell;
+
+    let seed = 20241201;
+    let filter = { category: "All", month: "All" };
+    let data = [];
+    const charts = [];
+
+    function generate() {
+      const rng = makeRng(seed);
+      return MONTHS.map((label, mi) => {
+        const volume = rng.int(40000, 120000);
+        const budgetCpu = rng.float(120, 220);
+        const variance = rng.norm(0, 5);
+        const cpu = budgetCpu + variance;
+        const savings = {};
+        WASTE_TYPES.forEach((w) => { savings[w] = rng.int(5000, 200000); });
+        return { label, volume, budgetCpu, cpu, savings };
+      });
+    }
+
+    function selectedMonths() {
+      return filter.month === "All" ? data : data.filter((d) => d.label === filter.month);
+    }
+    function savingsFor(m) {
+      if (filter.category === "All") return Object.values(m.savings).reduce((a, b) => a + b, 0);
+      return m.savings[filter.category] || 0;
+    }
+
+    function compute() {
+      const months = selectedMonths();
+      const totalVolume = months.reduce((a, m) => a + m.volume, 0);
+      const totalCost = months.reduce((a, m) => a + m.volume * m.cpu, 0);
+      const totalBudget = months.reduce((a, m) => a + m.volume * m.budgetCpu, 0);
+      const cpu = totalCost / totalVolume;
+      const variance = totalBudget ? ((totalCost - totalBudget) / totalBudget) * 100 : 0;
+      const totalSavings = months.reduce((a, m) => a + savingsFor(m), 0);
+
+      const savingsYtd = (() => {
+        const idx = filter.month === "All" ? data.length : data.findIndex((d) => d.label === filter.month) + 1;
+        return data.slice(0, idx).reduce((a, m) => a + savingsFor(m), 0);
+      })();
+
+      const savingsByMonth = months.map((m) => savingsFor(m));
+      const savingsByCategory = WASTE_TYPES.map((w) => months.reduce((a, m) => a + (m.savings[w] || 0), 0));
+
+      return { months, totalVolume, totalCost, totalBudget, cpu, variance, totalSavings, savingsYtd, savingsByMonth, savingsByCategory };
+    }
+
+    function render() {
+      charts.forEach((c) => c.destroy());
+      charts.length = 0;
+      const c = compute();
+
+      main.innerHTML = "";
+      main.append(
+        kpiCards([
+          { label: "Cost per unit", value: "৳" + fmt(c.cpu, 2), sub: "total cost ÷ volume", status: c.variance <= 0 ? "good" : "warn" },
+          { label: "Total savings", value: "৳" + fmt(c.totalSavings), sub: "Kaizen, selected window", status: "good" },
+          { label: "Budget variance", value: pctStr(c.variance, 1), sub: "(actual − budget) ÷ budget", status: c.variance <= -2 ? "good" : c.variance <= 2 ? "warn" : "bad" },
+          { label: "Savings YTD", value: "৳" + fmt(c.savingsYtd), sub: "cumulative", status: "good" },
+        ]),
+        el("div", { class: "grid cols-2" },
+          card("Cost per unit trend", "", el("div", { class: "chart-box" }, el("canvas", { id: "cpuTrend" }))),
+          card("Kaizen savings by month", "", el("div", { class: "chart-box" }, el("canvas", { id: "savMonth" })))
+        ),
+        el("div", { class: "grid cols-2" },
+          card("Budget vs actual cost", "", el("div", { class: "chart-box" }, el("canvas", { id: "budgetActual" }))),
+          card("Savings by category", "", el("div", { class: "chart-box" }, el("canvas", { id: "savCategory" })))
+        ),
+        el("h3", { style: "margin:18px 0 10px" }, "Monthly cost & savings detail"),
+        dataTable(
+          [
+            "Month",
+            { label: "Volume", key: "volume", align: "right", render: (r) => fmt(r.volume) },
+            { label: "Cost/unit (BDT)", key: "cpu", align: "right", render: (r) => "৳" + fmt(r.cpu, 2) },
+            { label: "Budget/unit (BDT)", key: "budgetCpu", align: "right", render: (r) => "৳" + fmt(r.budgetCpu, 2) },
+            { label: "Variance %", key: "variance", align: "right", render: (r) => pctStr(((r.cpu - r.budgetCpu) / r.budgetCpu) * 100, 1) },
+            { label: "Savings (BDT)", key: "savings", align: "right", render: (r) => "৳" + fmt(savingsFor(r)) },
+            { label: "Status", key: "cpu", render: (r) => { const v = ((r.cpu - r.budgetCpu) / r.budgetCpu) * 100; return pill(v <= -2 ? "good" : v <= 2 ? "warn" : "bad", v <= -2 ? "Under budget" : v <= 2 ? "On budget" : "Over budget"); } },
+          ],
+          c.months
+        ),
+        insights([
+          "Average cost per unit is <b>৳" + fmt(c.cpu, 2) + "</b> with a budget variance of <b>" + pctStr(c.variance, 1) + "</b> (" + (c.variance <= 0 ? "favourable — under budget." : "unfavourable — over budget.") + ")",
+          "Total Kaizen savings in the selected window are <b>৳" + fmt(c.totalSavings) + "</b>, YTD <b>৳" + fmt(c.savingsYtd) + "</b>.",
+          (() => { const max = Math.max(...c.savingsByCategory); const idx = c.savingsByCategory.indexOf(max); return max > 0 ? "The largest saving category is <b>" + WASTE_TYPES[idx] + "</b> at ৳" + fmt(max) + "." : ""; })(),
+        ]),
+        calcSection("How it's calculated", [
+          "Cost per unit = total cost ÷ total units",
+          "Variance % = (actual − budget) ÷ budget × 100",
+          "Budget variance favourable when actual < budget (negative %).",
+        ], [
+          "Kaizen savings are recorded per waste category (e.g. defects, waiting, motion).",
+          "Savings YTD is cumulative from Jan through the selected month.",
+          "Synthetic demo data — seeded for reproducibility.",
+        ])
+      );
+
+      renderCharts(c);
+    }
+
+    function renderCharts(c) {
+      const c1 = lineChart(document.getElementById("cpuTrend"), {
+        labels: c.months.map((m) => m.label),
+        datasets: [
+          { label: "Actual cost/unit", data: c.months.map((m) => +m.cpu.toFixed(2)), color: color(0), fill: true },
+          { label: "Budget cost/unit", data: c.months.map((m) => +m.budgetCpu.toFixed(2)), color: "#fbbf24", fill: false },
+        ],
+        yTitle: "BDT / unit",
+      });
+      charts.push(c1);
+
+      const c2 = barChart(document.getElementById("savMonth"), {
+        labels: c.months.map((m) => m.label),
+        datasets: [{ label: "Savings (BDT)", data: c.savingsByMonth.map((v) => Math.round(v)), color: color(3), borderRadius: 4 }],
+        yTitle: "BDT",
+      });
+      charts.push(c2);
+
+      const c3 = barChart(document.getElementById("budgetActual"), {
+        labels: c.months.map((m) => m.label),
+        datasets: [
+          { label: "Budget (BDT)", data: c.months.map((m) => Math.round(m.volume * m.budgetCpu)), color: color(5) },
+          { label: "Actual (BDT)", data: c.months.map((m) => Math.round(m.volume * m.cpu)), color: color(0) },
+        ],
+        yTitle: "BDT",
+      });
+      charts.push(c3);
+
+      const c4 = doughnutChart(document.getElementById("savCategory"), {
+        labels: WASTE_TYPES,
+        values: c.savingsByCategory.map((v) => Math.round(v)),
+      });
+      charts.push(c4);
+    }
+
+    function setupToolbar() {
+      toolbar.append(
+        toolbarButtons({
+          onRegenerate: () => { seed = Math.floor(Math.random() * 1e8); data = generate(); render(); },
+          onExport: () => {
+            const c = compute();
+            downloadCSV("cost-savings", ["Month", "Volume", "Cost/unit (BDT)", "Budget/unit (BDT)", "Variance %", "Savings (BDT)", "Status"],
+              c.months.map((m) => ({ "Month": m.label, "Volume": m.volume, "Cost/unit (BDT)": m.cpu.toFixed(2), "Budget/unit (BDT)": m.budgetCpu.toFixed(2), "Variance %": (((m.cpu - m.budgetCpu) / m.budgetCpu) * 100).toFixed(1), "Savings (BDT)": Math.round(savingsFor(m)), "Status": m.cpu <= m.budgetCpu ? "Under budget" : "Over budget" })));
+          },
+        })
+      );
+
+      const catSelect = el("select", {},
+        el("option", { value: "All", selected: "" }, "All categories"),
+        ...WASTE_TYPES.map((w) => el("option", { value: w }, w))
+      );
+      catSelect.addEventListener("change", () => { filter.category = catSelect.value; render(); });
+
+      const monthSelect = el("select", {},
+        el("option", { value: "All", selected: "" }, "All months"),
+        ...MONTHS.map((m) => el("option", { value: m }, m))
+      );
+      monthSelect.addEventListener("change", () => { filter.month = monthSelect.value; render(); });
+
+      toolbar.append(
+        el("div", { class: "filterbar", style: "flex:1 1 100%" },
+          el("div", { class: "field" }, el("label", {}, "Category"), catSelect),
+          el("div", { class: "field" }, el("label", {}, "Month"), monthSelect)
+        )
+      );
+    }
+
+    data = generate();
+    setupToolbar();
+    render();
+  </script>
+</body>
+</html>

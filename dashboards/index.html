@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Manufacturing Analytics Dashboards — Md. Maruf Hossain</title>
+  <meta name="description" content="15 interactive manufacturing analytics dashboards covering Lean/Industrial Engineering, factory departments and executive level. All data is synthetic sample data for demonstration." />
+  <meta name="theme-color" content="#05060d" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/design-system.css" />
+</head>
+<body>
+  <div class="topbar">
+    <a class="brand" href="https://marufhossain-portfolio.github.io/">
+      <span class="mark">MMH</span>
+      <span class="txt">Manufacturing Analytics<small>SAMPLE DATA · DEMO</small></span>
+    </a>
+    <a class="back" href="https://marufhossain-portfolio.github.io/" target="_blank" rel="noopener">Portfolio ↗</a>
+    <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+      <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+  </div>
+
+  <div class="wrap">
+    <div class="page-head">
+      <div class="kicker">Manufacturing Analytics Suite</div>
+      <h1>Interactive <span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent">Dashboards</span></h1>
+      <div class="sub">
+        15 interactive dashboards spanning Lean / Industrial Engineering, factory departments and executive reporting —
+        each with KPIs, charts, filters, data tables, CSV export, auto-generated insights and the formulas behind the numbers.
+      </div>
+      <div class="badge-sample" role="note" style="margin-top:16px">
+        <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></span>
+        <span>Every dashboard uses synthetic sample data for demonstration</span>
+      </div>
+    </div>
+
+    <div class="hub-filters" id="filters">
+      <button class="hub-filter active" data-cat="all">All</button>
+      <button class="hub-filter" data-cat="lean">Lean / IE</button>
+      <button class="hub-filter" data-cat="departmental">Departments</button>
+      <button class="hub-filter" data-cat="executive">Executive</button>
+    </div>
+
+    <div id="hub"></div>
+  </div>
+
+  <script type="module">
+    import { initTheme, el } from "./shared/components.js";
+    initTheme();
+
+    const I = {
+      balance: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 20h18M5 20V9m4 11V5m4 15v-7m4 7V11"/></svg>',
+      capacity: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4zM8 8h8v8H8zM3 3h4v4H3zM17 17h4v4h-4z"/></svg>',
+      downtime: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>',
+      kaizen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>',
+      vsm: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h4v8H3zM17 8h4v8h-4zM7 12h10M9 6l3-3 3 3M9 18l3 3 3-3"/></svg>',
+      time: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/></svg>',
+      plan: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v4H3zM3 10h18v4H3zM3 17h18v4H3z"/></svg>',
+      quality: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 6v6c0 5 3.4 9.4 8 10 4.6-.6 8-5 8-10V6z"/><path d="M9 12l2 2 4-4"/></svg>',
+      inventory: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-5 9 5v9l-9 5-9-5z"/><path d="M3 9l9 5 9-5M12 14v9"/></svg>',
+      maintenance: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.4 2.4-2.1-2.1z"/></svg>',
+      supplier: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18v10H3zM7 7V5h10v2M3 12h18"/></svg>',
+      oee: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+      cost: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+      manpower: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg>',
+      energy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>',
+    };
+
+    const CAT = {
+      lean: "Lean / Industrial Engineering",
+      departmental: "Factory Departments",
+      executive: "Executive Level",
+    };
+
+    const DB = [
+      { slug: "line-balancing", cat: "lean", icon: "balance", title: "Line Balancing Simulator", desc: "Takt time, workstation loading, bottleneck and balance efficiency — reassign operations live and compare before/after.", tags: ["Takt", "SMV", "Bottleneck"] },
+      { slug: "capacity-planning", cat: "lean", icon: "capacity", title: "Capacity Planning", desc: "Required vs available minutes per line, utilization heatmap and what-if scenarios (demand, overtime, manpower).", tags: ["Utilization", "What-if", "SKU"] },
+      { slug: "downtime-reliability", cat: "lean", icon: "downtime", title: "Downtime Pareto & Reliability", desc: "Downtime Pareto with 80% rule, MTBF/MTTR, availability and top reasons — click a bar to cross-filter.", tags: ["MTBF", "MTTR", "Pareto"] },
+      { slug: "kaizen-tracker", cat: "lean", icon: "kaizen", title: "Kaizen / CI Tracker", desc: "Idea pipeline (Kanban), savings by month/department/waste type, leaderboard and before/after panels.", tags: ["8 Wastes", "Savings", "Kanban"] },
+      { slug: "value-stream-map", cat: "lean", icon: "vsm", title: "Interactive Value Stream Map", desc: "Process boxes with CT/CO/uptime/WIP, lead time vs value-added time, PCE and a current vs future state toggle.", tags: ["VSM", "PCE", "Lead Time"] },
+      { slug: "time-study", cat: "lean", icon: "time", title: "Time Study Tool", desc: "On-screen stopwatch, element laps, rating & allowance, SMV and output/hour with cycle variation chart.", tags: ["SMV", "Stopwatch", "Allowance"] },
+      { slug: "production-plan", cat: "departmental", icon: "plan", title: "Production Plan vs Actual", desc: "Hourly/daily output vs target by line and SKU, achievement %, efficiency and shift comparison.", tags: ["Achievement", "OEE", "Shifts"] },
+      { slug: "quality-spc", cat: "departmental", icon: "quality", title: "Quality & SPC", desc: "Defect Pareto, X-bar/R and p-charts with UCL/LCL + Western Electric rules, Cp/Cpk and process histogram.", tags: ["SPC", "Cp/Cpk", "FPY"] },
+      { slug: "inventory", cat: "departmental", icon: "inventory", title: "Inventory & Store", desc: "ABC analysis, stock vs reorder/safety, slow movers, turnover and days of cover with reorder alerts.", tags: ["ABC", "Reorder", "Turnover"] },
+      { slug: "maintenance", cat: "departmental", icon: "maintenance", title: "Maintenance", desc: "PM compliance, breakdown log, machine health score, cost trend and overdue PM list.", tags: ["PM", "MTBF", "Health"] },
+      { slug: "supplier", cat: "departmental", icon: "supplier", title: "Supplier Performance", desc: "OTIF, lead time, reject rate and spend concentration with a supplier scorecard ranking.", tags: ["OTIF", "Scorecard", "Lead Time"] },
+      { slug: "executive-oee", cat: "executive", icon: "oee", title: "Executive OEE & Loss", desc: "Plant-wide OEE with availability/performance/quality loss tree and a month-over-month waterfall.", tags: ["Loss tree", "OEE", "Waterfall"] },
+      { slug: "cost-savings", cat: "executive", icon: "cost", title: "Cost & Savings", desc: "Cost per unit, Kaizen savings trend, budget vs actual variance and savings by category.", tags: ["CPU", "Savings", "Budget"] },
+      { slug: "productivity-manpower", cat: "executive", icon: "manpower", title: "Productivity & Manpower", desc: "Output per operator, labor efficiency, absenteeism, overtime and manpower requirement vs availability.", tags: ["OPH", "Manpower", "Efficiency"] },
+      { slug: "energy", cat: "executive", icon: "energy", title: "Energy & Utilities", desc: "Consumption by utility, energy intensity per unit, cost trend and peak demand analysis.", tags: ["kWh", "Intensity", "Cost"] },
+    ];
+
+    const hub = document.getElementById("hub");
+    const order = { lean: 0, departmental: 1, executive: 2 };
+    let active = "all";
+
+    function render() {
+      hub.innerHTML = "";
+      const filtered = DB.filter((d) => active === "all" || d.cat === active);
+      const groups = {};
+      for (const d of filtered) (groups[d.cat] = groups[d.cat] || []).push(d);
+      for (const cat of Object.keys(groups).sort((a, b) => order[a] - order[b])) {
+        hub.append(el("div", { class: "hub-cat" }, CAT[cat]));
+        const grid = el("div", { class: "hub-grid" });
+        for (const d of groups[cat]) {
+          grid.append(
+            el(
+              "a",
+              { class: "hub-card", href: d.slug + ".html" },
+              el("div", { class: "ic", html: I[d.icon] }),
+              el("h3", {}, d.title),
+              el("p", {}, d.desc),
+              el("div", { class: "tags" }, ...d.tags.map((t) => el("span", { class: "tag" }, t))),
+              el("span", { class: "open" }, "Open", '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h12l-5-5 1.4-1.4L21 12l-7.6 6.4L12 17l5-5H5z"/></svg>')
+            )
+          );
+        }
+        hub.append(grid);
+      }
+    }
+
+    document.getElementById("filters").addEventListener("click", (e) => {
+      const btn = e.target.closest(".hub-filter");
+      if (!btn) return;
+      active = btn.dataset.cat;
+      document.querySelectorAll(".hub-filter").forEach((b) => b.classList.toggle("active", b === btn));
+      render();
+    });
+
+    render();
+  </script>
+</body>
+</html>

@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Time Study Tool — Manufacturing Analytics</title>
+  <meta name="description" content="On-screen stopwatch, element lap recording across cycles, rating & allowance, and SMV calculation." />
+  <meta name="theme-color" content="#05060d" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/design-system.css" />
+  <style>
+    .stopwatch { display:flex; flex-direction:column; align-items:center; gap:14px; padding:18px 0; }
+    .sw-display { font-family:"Sora",sans-serif; font-size:52px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:.02em; }
+    .sw-btns { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+    .sw-current { font-size:13px; color:var(--muted); }
+    .sw-current b { color:var(--accent,#22d3ee); font-size:16px; }
+    .laps { margin-top:8px; }
+    .lap-row { display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px dashed var(--border); }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <script type="module">
+    import { renderShell, el, kpiCards, insights, calcSection, card, fmt, pctStr, rag, ragDot, pill, toolbarButtons, downloadCSV, lineChart, barChart, color, makeRng } from "./shared/bundle.js";
+
+    const shell = renderShell({
+      category: "Lean / Industrial Engineering",
+      kicker: "Lean / Industrial Engineering",
+      title: "Time Study Tool",
+      description: "On-screen stopwatch, element lap recording across cycles, rating & allowance, and SMV calculation.",
+    });
+    const { main, toolbar } = shell;
+
+    const ELEMENTS = ["Pick part", "Position", "Assemble", "Inspect", "Place"];
+    const LS_KEY = "mmh2-time-study";
+    const ALLOWANCE = 0.15;
+
+    let elements = loadElements();
+    let currentElement = 0;
+    let running = false;
+    let startTime = 0;
+    let elapsed = 0;
+    let timer = null;
+
+    function loadElements() {
+      try {
+        const raw = localStorage.getItem(LS_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.elements) return parsed.elements;
+        }
+      } catch (e) {}
+      return buildSeeded(7);
+    }
+
+    function buildSeeded(seed) {
+      const rng = makeRng(seed);
+      return ELEMENTS.map((name, i) => {
+        const base = [3.2, 4.5, 12.0, 5.0, 2.8][i];
+        const rating = Math.round(rng.norm(100, 6));
+        const cycles = rng.int(3, 6);
+        const times = [];
+        for (let c = 0; c < cycles; c++) times.push(Math.round(base * rng.norm(1, 0.08) * 100) / 100);
+        return { name, rating, times };
+      });
+    }
+
+    function saveElements() {
+      try { localStorage.setItem(LS_KEY, JSON.stringify({ elements })); } catch (e) {}
+    }
+
+    function elementStats(e) {
+      const n = e.times.length;
+      const mean = n ? e.times.reduce((a, b) => a + b, 0) / n : 0;
+      const sd = n > 1 ? Math.sqrt(e.times.reduce((a, b) => a + (b - mean) ** 2, 0) / n) : 0;
+      const normal = mean * (e.rating / 100);
+      const standard = normal * (1 + ALLOWANCE);
+      return { n, mean, sd, normal, standard, outliers: e.times.filter((t) => Math.abs(t - mean) > 2 * sd) };
+    }
+
+    function totalSMV() {
+      return elements.reduce((a, e) => a + elementStats(e).standard / 60, 0);
+    }
+    function totalCycles() {
+      return elements.reduce((a, e) => a + e.times.length, 0);
+    }
+
+    function fmtTime(sec) {
+      const m = Math.floor(sec / 60);
+      const s = sec - m * 60;
+      return m + ":" + s.toFixed(1).padStart(4, "0");
+    }
+
+    function startStop() {
+      if (running) {
+        clearInterval(timer); timer = null; running = false;
+        elapsed = (performance.now() - startTime) / 1000;
+        updateDisplay();
+      } else {
+        running = true;
+        startTime = performance.now() - elapsed * 1000;
+        timer = setInterval(() => {
+          elapsed = (performance.now() - startTime) / 1000;
+          updateDisplay();
+        }, 30);
+      }
+      updateButtons();
+    }
+
+    function reset() {
+      clearInterval(timer); timer = null; running = false; elapsed = 0;
+      updateDisplay(); updateButtons();
+    }
+
+    function lap() {
+      if (elapsed <= 0) return;
+      const e = elements[currentElement];
+      e.times.push(Math.round(elapsed * 100) / 100);
+      elapsed = 0;
+      if (running) startTime = performance.now();
+      saveElements();
+      updateDisplay();
+      render();
+    }
+
+    function updateDisplay() {
+      const d = document.getElementById("sw-display");
+      if (d) d.textContent = fmtTime(elapsed);
+    }
+    function updateButtons() {
+      const s = document.getElementById("sw-start");
+      if (s) s.innerHTML = running ? "Stop" : "Start";
+    }
+
+    function render() {
+      const smv = totalSMV();
+      const cycles = totalCycles();
+      const outputPerHour = smv > 0 ? 60 / smv : 0;
+
+      main.innerHTML = "";
+
+      main.append(
+        kpiCards([
+          { label: "Total SMV", value: smv.toFixed(3) + " min", sub: "standard minute value", status: "good" },
+          { label: "Output / hour", value: fmt(outputPerHour, 1), sub: "units at standard", status: rag("efficiency", Math.min(100, outputPerHour / 40 * 100)) },
+          { label: "Cycles recorded", value: fmt(cycles), sub: "across " + elements.length + " elements", status: cycles >= 20 ? "good" : "warn" },
+          { label: "PF&D allowance", value: pctStr(ALLOWANCE * 100, 0), sub: "personal, fatigue & delay", status: "good" },
+        ])
+      );
+
+      main.append(
+        el("div", { class: "grid cols-2" },
+          card("Stopwatch", "",
+            el("div", { class: "stopwatch" },
+              el("div", { class: "sw-current" }, "Recording element: ", el("b", {}, elements[currentElement].name)),
+              el("div", { class: "sw-display", id: "sw-display" }, "0:00.0"),
+              el("div", { class: "sw-btns" },
+                el("button", { class: "btn primary", type: "button", id: "sw-start", onclick: startStop }, "Start"),
+                el("button", { class: "btn", type: "button", onclick: lap }, "Lap"),
+                el("button", { class: "btn", type: "button", onclick: reset }, "Reset"),
+                el("select", { id: "el-select", style: "padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-2);color:var(--text)",
+                  onchange: (e) => { currentElement = Number(e.target.value); render(); } },
+                  ...elements.map((elv, i) => el("option", { value: i, selected: i === currentElement ? "" : null }, elv.name))
+                )
+              ),
+              el("div", { class: "laps", id: "laps" }, renderLaps())
+            )
+          ),
+          card("Cycle-to-cycle variation", "", el("div", { class: "chart-box" }, el("canvas", { id: "varChart" })))
+        )
+      );
+
+      main.append(
+        el("div", { class: "grid cols-2" },
+          card("Observed time by cycle", "", el("div", { class: "chart-box" }, el("canvas", { id: "obsChart" }))),
+          card("Study settings & notes", "",
+            el("div", { class: "insights" },
+              el("h3", {}, "Recording tips"),
+              el("ul",
+                el("li", { html: "Use <b>Lap</b> to snap the stopwatch for the current element, then move to the next." }),
+                el("li", { html: "Aim for <b>5+ cycles</b> per element to stabilise the observed average." }),
+                el("li", { html: "Outlier laps (highlighted red) are excluded by hovering over the element average." }),
+              )
+            ),
+            el("button", { class: "btn primary", type: "button", onclick: saveStudy, style: "margin-top:12px" }, "Save study"),
+            el("button", { class: "btn", type: "button", onclick: () => { elements = buildSeeded(Math.floor(Math.random() * 1e9)); saveElements(); render(); }, style: "margin-top:12px;margin-left:8px" }, "Reset to seeded demo")
+          )
+        )
+      );
+
+      main.append(el("h3", { style: "margin:18px 0 10px" }, "Element breakdown — observed, normal & standard time"));
+      main.append(renderTable());
+      main.append(insights([
+        "Total <b>SMV = " + smv.toFixed(3) + " min</b>, giving an output rate of <b>" + fmt(outputPerHour, 1) + " units/hour</b> at standard.",
+        biggestElement() + " dominates the cycle at <b>" + biggestStat() + "</b> — the best target for method improvement.",
+        "Average rating is <b>" + avgRating() + "%</b> " + (avgRating() < 100 ? "(below 100% — operator working slower than standard pace)." : "(at/above standard pace)."),
+      ]));
+      main.append(calcSection("How it's calculated", [
+        "Observed time (avg) = Σ(lap times) ÷ number of cycles",
+        "Normal time = observed time × (rating factor ÷ 100)",
+        "Standard time = normal time × (1 + PF&D allowance)",
+        "SMV = standard time (in minutes)",
+        "Output per hour = 60 ÷ SMV",
+      ], [
+        "PF&D (Personal, Fatigue & Delay) allowance is fixed at " + pctStr(ALLOWANCE * 100, 0) + " for this study.",
+        "Rating factor is the analyst's assessment of operator pace vs standard (100%).",
+      ]));
+
+      renderCharts();
+    }
+
+    function renderLaps() {
+      const e = elements[currentElement];
+      const stats = elementStats(e);
+      if (!e.times.length) return el("div", { class: "sw-current" }, "No laps yet — press Start, then Lap.");
+      return el("div", {},
+        e.times.map((t, i) => {
+          const isOutlier = stats.outliers.includes(t);
+          return el("div", { class: "lap-row" },
+            el("span", {}, "Cycle " + (i + 1)),
+            el("span", {}, isOutlier ? el("span", {}, fmt(t, 2) + "s ", ragDot("bad")) : fmt(t, 2) + "s")
+          );
+        })
+      );
+    }
+
+    function renderTable() {
+      const cols = [
+        { label: "Element", key: "name" },
+        { label: "Cycles", key: "n", align: "right" },
+        { label: "Observed avg (s)", key: "mean", align: "right", render: (r) => fmt(r.mean, 2) },
+        { label: "Rating %", key: "rating", align: "right" },
+        { label: "Normal time (s)", key: "normal", align: "right", render: (r) => fmt(r.normal, 2) },
+        { label: "Standard time (s)", key: "standard", align: "right", render: (r) => fmt(r.standard, 2) },
+        { label: "SMV (min)", key: "smv", align: "right", render: (r) => r.smv.toFixed(3) },
+        { label: "Outliers", key: "outliers", align: "right", render: (r) => r.outlierCount ? pill("bad", r.outlierCount + " laps") : pill("good", "None") },
+      ];
+      const rows = elements.map((e) => {
+        const st = elementStats(e);
+        return {
+          name: e.name, n: st.n, mean: st.mean, rating: e.rating,
+          normal: st.normal, standard: st.standard, smv: st.standard / 60,
+          outlierCount: st.outliers.length,
+        };
+      });
+      return dataTable(cols, rows);
+    }
+
+    function renderCharts() {
+      const labels = Array.from({ length: Math.max(...elements.map((e) => e.times.length), 0) }, (_, i) => "Cycle " + (i + 1));
+      const datasets = elements.map((e, i) => ({
+        label: e.name,
+        data: e.times,
+        color: color(i),
+        fill: false,
+      }));
+      lineChart(document.getElementById("varChart"), { labels, datasets, yTitle: "Observed time (s)" });
+
+      const obsLabels = elements.map((e) => e.name);
+      const obsData = elements.map((e) => elementStats(e).mean);
+      barChart(document.getElementById("obsChart"), {
+        labels: obsLabels,
+        datasets: [{ label: "Observed avg (s)", data: obsData, backgroundColor: obsData.map((_, i) => color(i)) }],
+        yTitle: "Seconds",
+      });
+    }
+
+    function biggestElement() {
+      let bi = 0; let bv = -1;
+      elements.forEach((e, i) => { const st = elementStats(e); if (st.standard > bv) { bv = st.standard; bi = i; } });
+      return elements[bi].name;
+    }
+    function biggestStat() {
+      let bv = -1; elements.forEach((e) => { bv = Math.max(bv, elementStats(e).standard); });
+      return bv.toFixed(1) + "s standard";
+    }
+    function avgRating() {
+      return (elements.reduce((a, e) => a + e.rating, 0) / elements.length).toFixed(0);
+    }
+
+    function saveStudy() {
+      saveElements();
+      alert("Study saved to this browser (localStorage).");
+    }
+
+    function exportCSV() {
+      const cols = ["Element", "Cycles", "Observed avg (s)", "Rating %", "Normal time (s)", "Standard time (s)", "SMV (min)"];
+      const rows = elements.map((e) => {
+        const st = elementStats(e);
+        return { "Element": e.name, "Cycles": st.n, "Observed avg (s)": st.mean.toFixed(2), "Rating %": e.rating, "Normal time (s)": st.normal.toFixed(2), "Standard time (s)": st.standard.toFixed(2), "SMV (min)": (st.standard / 60).toFixed(3) };
+      });
+      downloadCSV("time-study", cols, rows);
+    }
+
+    function setupToolbar() {
+      toolbar.append(toolbarButtons({
+        onRegenerate: () => { elements = buildSeeded(Math.floor(Math.random() * 1e9)); saveElements(); render(); },
+        onExport: exportCSV,
+      }));
+    }
+
+    setupToolbar();
+    render();
+  </script>
+</body>
+</html>

@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Productivity & Manpower — Manufacturing Analytics</title>
+  <meta name="description" content="Output per operator, labor efficiency, absenteeism, overtime and manpower requirement vs availability." />
+  <meta name="theme-color" content="#05060d" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/design-system.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <script type="module">
+    import { renderShell, el, kpiCards, insights, calcSection, card, fmt, pctStr, make, color, rag, pill, toolbarButtons, dataTable, downloadCSV, makeRng, lineChart, barChart } from "./shared/bundle.js";
+    import { LINES, MONTHS } from "./data/constants.js";
+
+    const shell = renderShell({
+      category: "Executive Level",
+      kicker: "Executive Level",
+      title: "Productivity & Manpower",
+      description: "Output per operator, labor efficiency, absenteeism, overtime and manpower requirement vs availability.",
+    });
+    const { main, toolbar } = shell;
+
+    let seed = 20250110;
+    let filter = { line: "All", month: "All" };
+    let data = [];
+    const charts = [];
+    const STD_OPH = 4.5;
+
+    function generate() {
+      const rng = makeRng(seed);
+      return LINES.map((name) => {
+        const baseHeadcount = rng.int(18, 40);
+        const baseOph = rng.float(3.2, 5.8);
+        const months = MONTHS.map(() => {
+          const headcount = Math.max(8, baseHeadcount + rng.int(-2, 2));
+          const hours = rng.int(150, 180);
+          const output = Math.round(headcount * hours * baseOph * rng.float(0.9, 1.1));
+          const efficiency = rng.float(78, 93);
+          const absenteeism = rng.float(2, 9);
+          const overtime = rng.int(0, 40);
+          const oph = output / (headcount * hours);
+          return { headcount, hours, output, efficiency, absenteeism, overtime, oph };
+        });
+        return { name, months };
+      });
+    }
+
+    function selectedLines() {
+      return filter.line === "All" ? data : data.filter((l) => l.name === filter.line);
+    }
+    function monthIndices() {
+      return filter.month === "All" ? MONTHS.map((_, i) => i) : [MONTHS.indexOf(filter.month)];
+    }
+    function allCells() {
+      const cells = [];
+      selectedLines().forEach((l) => monthIndices().forEach((mi) => cells.push({ line: l.name, mi, ...l.months[mi] })));
+      return cells;
+    }
+
+    function compute() {
+      const cells = allCells();
+      const totalOutput = cells.reduce((a, c) => a + c.output, 0);
+      const totalOphHours = cells.reduce((a, c) => a + c.headcount * c.hours, 0);
+      const oph = totalOphHours ? totalOutput / totalOphHours : 0;
+      const eff = cells.length ? cells.reduce((a, c) => a + c.efficiency, 0) / cells.length : 0;
+      const abs = cells.length ? cells.reduce((a, c) => a + c.absenteeism, 0) / cells.length : 0;
+      const headcount = cells.reduce((a, c) => a + c.headcount, 0);
+
+      const lines = selectedLines();
+      const range = monthIndices();
+
+      const ophByMonth = range.map((mi) => {
+        const cs = lines.map((l) => ({ line: l.name, ...l.months[mi] }));
+        const out = cs.reduce((a, c) => a + c.output, 0);
+        const oh = cs.reduce((a, c) => a + c.headcount * c.hours, 0);
+        return oh ? out / oh : 0;
+      });
+      const absByMonth = range.map((mi) => {
+        const cs = lines.map((l) => l.months[mi]);
+        return cs.reduce((a, c) => a + c.absenteeism, 0) / cs.length;
+      });
+      const otByMonth = range.map((mi) => {
+        const cs = lines.map((l) => l.months[mi]);
+        return cs.reduce((a, c) => a + c.overtime, 0) / cs.length;
+      });
+
+      const effByLine = lines.map((l) => {
+        const cs = range.map((mi) => l.months[mi]);
+        return { name: l.name, eff: cs.reduce((a, c) => a + c.efficiency, 0) / cs.length };
+      });
+
+      const manpowerByLine = lines.map((l) => {
+        const cs = range.map((mi) => l.months[mi]);
+        const out = cs.reduce((a, c) => a + c.output, 0);
+        const oh = cs.reduce((a, c) => a + c.headcount * c.hours, 0);
+        const required = oh ? Math.round(out / (STD_OPH * (oh / cs.reduce((a, c) => a + c.headcount, 0)))) : 0;
+        const available = cs.reduce((a, c) => a + c.headcount, 0) / cs.length;
+        return { name: l.name, required, available };
+      });
+
+      const latest = range[range.length - 1];
+      const tableRows = lines.map((l) => {
+        const m = l.months[latest];
+        return { name: l.name, output: m.output, headcount: m.headcount, oph: m.oph, efficiency: m.efficiency, absenteeism: m.absenteeism, overtime: m.overtime };
+      });
+
+      return { oph, eff, abs, headcount, ophByMonth, absByMonth, otByMonth, effByLine, manpowerByLine, range, tableRows };
+    }
+
+    function render() {
+      charts.forEach((c) => c.destroy());
+      charts.length = 0;
+      const c = compute();
+
+      main.innerHTML = "";
+      main.append(
+        kpiCards([
+          { label: "Output / operator-hour", value: fmt(c.oph, 2), sub: "units per hour", status: "good" },
+          { label: "Labor efficiency", value: pctStr(c.eff), sub: "earned ÷ worked", status: rag("efficiency", c.eff) },
+          { label: "Absenteeism", value: pctStr(c.abs), sub: "absent ÷ planned", status: rag("rejection", c.abs) },
+          { label: "Total headcount", value: fmt(c.headcount), sub: "operators in scope", status: "good" },
+        ]),
+        el("div", { class: "grid cols-2" },
+          card("Output per operator-hour trend", "", el("div", { class: "chart-box" }, el("canvas", { id: "ophTrend" }))),
+          card("Labor efficiency by line", "", el("div", { class: "chart-box" }, el("canvas", { id: "effByLine" })))
+        ),
+        el("div", { class: "grid cols-2" },
+          card("Absenteeism vs overtime", "", el("div", { class: "chart-box" }, el("canvas", { id: "absOt" }))),
+          card("Manpower requirement vs available", "", el("div", { class: "chart-box" }, el("canvas", { id: "manpower" })))
+        ),
+        el("h3", { style: "margin:18px 0 10px" }, "Line-level productivity"),
+        dataTable(
+          [
+            "Line",
+            { label: "Output", key: "output", align: "right", render: (r) => fmt(r.output) },
+            { label: "Headcount", key: "headcount", align: "right", render: (r) => fmt(r.headcount) },
+            { label: "OPH", key: "oph", align: "right", render: (r) => fmt(r.oph, 2) },
+            { label: "Efficiency %", key: "efficiency", align: "right", render: (r) => pctStr(r.efficiency) },
+            { label: "Absenteeism %", key: "absenteeism", align: "right", render: (r) => pctStr(r.absenteeism) },
+            { label: "Overtime (h)", key: "overtime", align: "right", render: (r) => fmt(r.overtime) },
+            { label: "Status", key: "efficiency", render: (r) => pill(rag("efficiency", r.efficiency), rag("efficiency", r.efficiency) === "good" ? "Good" : rag("efficiency", r.efficiency) === "warn" ? "Watch" : "Poor") },
+          ],
+          c.tableRows
+        ),
+        insights([
+          "Plant output per operator-hour is <b>" + fmt(c.oph, 2) + "</b> units with labor efficiency at <b>" + pctStr(c.eff) + "</b>.",
+          "Absenteeism averages <b>" + pctStr(c.abs) + "</b> — " + (c.abs <= 5 ? "within the acceptable band." : "above target, review attendance and coverage."),
+          (() => { const gaps = c.manpowerByLine.filter((m) => m.required > m.available); return gaps.length ? "<b>" + gaps.length + "</b> line(s) have manpower shortfall (required > available)." : "All lines have sufficient available manpower."; })(),
+        ]),
+        calcSection("How it's calculated", [
+          "Output per operator-hour (OPH) = output ÷ (headcount × hours)",
+          "Labor efficiency % = standard minutes earned ÷ actual minutes worked × 100",
+          "Absenteeism % = absent days ÷ planned days × 100",
+          "Required manpower = output ÷ (hours × standard OPH)",
+        ], [
+          "Standard OPH used for requirement = " + STD_OPH + " units/operator-hour.",
+          "Overtime is additional hours worked beyond planned hours.",
+          "Synthetic demo data — seeded for reproducibility.",
+        ])
+      );
+
+      renderCharts(c);
+    }
+
+    function renderCharts(c) {
+      const monthLabels = c.range.map((mi) => MONTHS[mi]);
+
+      const c1 = lineChart(document.getElementById("ophTrend"), {
+        labels: monthLabels,
+        datasets: [{ label: "OPH", data: c.ophByMonth.map((v) => +v.toFixed(2)), color: color(0), fill: true }],
+        yTitle: "Units / hour",
+      });
+      charts.push(c1);
+
+      const c2 = barChart(document.getElementById("effByLine"), {
+        labels: c.effByLine.map((r) => r.name),
+        datasets: [{ label: "Efficiency %", data: c.effByLine.map((r) => +r.eff.toFixed(1)), backgroundColor: c.effByLine.map((r) => (r.eff >= 90 ? "#34d399" : r.eff >= 78 ? "#fbbf24" : "#f87171")), borderRadius: 4 }],
+        yTitle: "Efficiency %",
+      });
+      charts.push(c2);
+
+      const c3 = make(document.getElementById("absOt"), {
+        type: "line",
+        data: {
+          labels: monthLabels,
+          datasets: [
+            { label: "Absenteeism %", data: c.absByMonth.map((v) => +v.toFixed(1)), borderColor: color(5), backgroundColor: "transparent", yAxisID: "y", tension: 0.3, pointRadius: 3, borderWidth: 2 },
+            { label: "Overtime (h)", data: c.otByMonth.map((v) => +v.toFixed(1)), borderColor: color(1), backgroundColor: "transparent", yAxisID: "y1", tension: 0.3, pointRadius: 3, borderWidth: 2 },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: "bottom" } },
+          scales: {
+            y: { position: "left", title: { display: true, text: "Absenteeism %" }, beginAtZero: true },
+            y1: { position: "right", title: { display: true, text: "Overtime (h)" }, grid: { drawOnChartArea: false }, beginAtZero: true },
+          },
+        },
+      });
+      charts.push(c3);
+
+      const c4 = barChart(document.getElementById("manpower"), {
+        labels: c.manpowerByLine.map((m) => m.name),
+        datasets: [
+          { label: "Available", data: c.manpowerByLine.map((m) => m.available), color: color(3) },
+          { label: "Required", data: c.manpowerByLine.map((m) => m.required), color: color(5) },
+        ],
+        yTitle: "Headcount",
+      });
+      charts.push(c4);
+    }
+
+    function setupToolbar() {
+      toolbar.append(
+        toolbarButtons({
+          onRegenerate: () => { seed = Math.floor(Math.random() * 1e8); data = generate(); render(); },
+          onExport: () => {
+            const c = compute();
+            downloadCSV("productivity-manpower", ["Line", "Output", "Headcount", "OPH", "Efficiency %", "Absenteeism %", "Overtime (h)", "Status"],
+              c.tableRows.map((r) => ({ "Line": r.name, "Output": r.output, "Headcount": r.headcount, "OPH": r.oph.toFixed(2), "Efficiency %": r.efficiency.toFixed(1), "Absenteeism %": r.absenteeism.toFixed(1), "Overtime (h)": r.overtime, "Status": rag("efficiency", r.efficiency) })));
+          },
+        })
+      );
+
+      const lineSelect = el("select", {},
+        el("option", { value: "All", selected: "" }, "All lines"),
+        ...LINES.map((l) => el("option", { value: l }, l))
+      );
+      lineSelect.addEventListener("change", () => { filter.line = lineSelect.value; render(); });
+
+      const monthSelect = el("select", {},
+        el("option", { value: "All", selected: "" }, "All months"),
+        ...MONTHS.map((m) => el("option", { value: m }, m))
+      );
+      monthSelect.addEventListener("change", () => { filter.month = monthSelect.value; render(); });
+
+      toolbar.append(
+        el("div", { class: "filterbar", style: "flex:1 1 100%" },
+          el("div", { class: "field" }, el("label", {}, "Line"), lineSelect),
+          el("div", { class: "field" }, el("label", {}, "Month"), monthSelect)
+        )
+      );
+    }
+
+    data = generate();
+    setupToolbar();
+    render();
+  </script>
+</body>
+</html>

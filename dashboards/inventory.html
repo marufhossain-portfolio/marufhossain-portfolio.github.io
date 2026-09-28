@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inventory & Store — Manufacturing Analytics</title>
+  <meta name="description" content="ABC analysis, stock vs reorder/safety level, slow movers, turnover and days of cover." />
+  <meta name="theme-color" content="#05060d" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/design-system.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <script type="module">
+    import { renderShell, el, kpiCards, insights, calcSection, card, fmt, pctStr, color, rag, pill, ragDot, toolbarButtons, dataTable, downloadCSV, makeRng, paretoChart, barChart, doughnutChart } from "./shared/bundle.js";
+    import { SKUS } from "./data/constants.js";
+
+    const shell = renderShell({
+      category: "Factory Departments",
+      kicker: "Factory Departments",
+      title: "Inventory & Store",
+      description: "ABC analysis, stock vs reorder/safety level, slow movers, turnover and days of cover.",
+    });
+    const { main, toolbar } = shell;
+
+    let seed = 20241001;
+    let items = [];
+    const charts = [];
+
+    const EXTRA = [
+      { id: "SKU-1003", name: "MCB 40A", group: "MCB" },
+      { id: "SKU-2003", name: "LED Bulb 20W", group: "LED" },
+      { id: "SKU-3003", name: "Switch 2-Gang", group: "Wiring" },
+      { id: "SKU-3004", name: "Socket 15A", group: "Wiring" },
+      { id: "SKU-5003", name: "DB Box 12W", group: "DB" },
+    ];
+
+    function generate() {
+      const rng = makeRng(seed);
+      const base = [...SKUS, ...EXTRA];
+      items = base.map((s) => {
+        const monthly = rng.int(0, 3000);
+        const unitCost = Math.round(rng.float(30, 900));
+        const leadTime = rng.int(3, 21);
+        const safety = Math.round(monthly / 30 * leadTime * rng.float(0.4, 0.8)) + rng.int(10, 60);
+        const reorder = safety + Math.round(monthly * rng.float(0.3, 0.8));
+        const current = Math.round(reorder * rng.float(0.4, 2.6));
+        return {
+          ...s,
+          current: current,
+          reorder: reorder,
+          safety: safety,
+          leadTime: leadTime,
+          monthly: monthly,
+          unitCost: unitCost,
+        };
+      });
+    }
+
+    function classify(item) {
+      const annualValue = item.monthly * 12 * item.unitCost;
+      const avgInv = Math.max((item.current + item.reorder) / 2, 1);
+      const turnover = annualValue ? (item.monthly * 12) / avgInv : 0;
+      const daysCover = item.monthly ? item.current / (item.monthly / 30) : 999;
+      const value = item.current * item.unitCost;
+      const movement = item.monthly >= 800 ? "Fast" : item.monthly >= 150 ? "Medium" : item.monthly >= 1 ? "Slow" : "Non-moving";
+      let status = "good";
+      if (item.current < item.safety) status = "warn";
+      if (item.current < item.reorder) status = "bad";
+      return { annualValue, turnover, daysCover, value, movement, status };
+    }
+
+    function compute() {
+      const enriched = items.map((it) => ({ ...it, ...classify(it) }));
+
+      // ABC classification by annual consumption value (desc)
+      const sorted = [...enriched].sort((a, b) => b.annualValue - a.annualValue);
+      const totalAV = sorted.reduce((a, s) => a + s.annualValue, 0) || 1;
+      let cum = 0;
+      for (const s of sorted) {
+        cum += s.annualValue;
+        const pct = (cum / totalAV) * 100;
+        s.cumPct = pct;
+        s.abc = pct <= 70 ? "A" : pct <= 90 ? "B" : "C";
+      }
+
+      const totalValue = enriched.reduce((a, s) => a + s.value, 0);
+      const totalMonthly = enriched.reduce((a, s) => a + s.monthly, 0);
+      const turnover = totalMonthly ? (totalMonthly * 12) / enriched.reduce((a, s) => a + Math.max((s.current + s.reorder) / 2, 1), 0) : 0;
+      const daysCover = totalMonthly ? (enriched.reduce((a, s) => a + s.current, 0)) / (totalMonthly / 30) : 0;
+      const belowReorder = enriched.filter((s) => s.current < s.reorder).length;
+
+      const movementGroups = ["Fast", "Medium", "Slow", "Non-moving"];
+      const byMovement = movementGroups.map((m) => ({ name: m, count: enriched.filter((s) => s.movement === m).length }));
+
+      return { enriched, sorted, totalAV, totalValue, turnover, daysCover, belowReorder, byMovement };
+    }
+
+    function add(c) { charts.push(c); return c; }
+
+    function render() {
+      charts.forEach((c) => c.destroy());
+      charts.length = 0;
+      const c = compute();
+
+      main.innerHTML = "";
+      main.append(
+        kpiCards([
+          { label: "Total inventory value", value: "৳" + fmt(c.totalValue, 0), sub: "current stock × unit cost", status: "good" },
+          { label: "Inventory turnover", value: fmt(c.turnover, 1) + "×", sub: "annual consumption ÷ avg inventory", status: rag("turnover", c.turnover) },
+          { label: "Days of cover", value: fmt(c.daysCover, 0) + " days", sub: "stock ÷ daily consumption", status: "good" },
+          { label: "Below reorder point", value: c.belowReorder, sub: "items needing replenishment", status: c.belowReorder > 5 ? "bad" : c.belowReorder > 2 ? "warn" : "good" },
+        ]),
+        el("div", { class: "grid cols-2" },
+          card("ABC analysis (annual consumption value)", "", el("div", { class: "chart-box tall" }, el("canvas", { id: "abcCanvas" }))),
+          card("Stock vs reorder / safety level", "", el("div", { class: "chart-box tall" }, el("canvas", { id: "stockCanvas" })))
+        ),
+        el("div", { class: "grid cols-2" },
+          card("Movement class distribution", "", el("div", { class: "chart-box tall" }, el("canvas", { id: "movementCanvas" }))),
+          card("Days of cover by SKU", "", el("div", { class: "chart-box tall" }, el("canvas", { id: "coverCanvas" })))
+        ),
+        el("h3", { style: "margin:18px 0 10px" }, "Reorder alerts"),
+        (() => {
+          const alerts = c.enriched.filter((s) => s.current < s.reorder || s.current < s.safety);
+          if (!alerts.length) return el("p", {}, "No items below reorder or safety level.");
+          return dataTable(
+            [
+              { label: "SKU", key: "id" },
+              "Name",
+              { label: "Stock", key: "current", align: "right", render: (r) => fmt(r.current) },
+              { label: "Reorder", key: "reorder", align: "right", render: (r) => fmt(r.reorder) },
+              { label: "Safety", key: "safety", align: "right", render: (r) => fmt(r.safety) },
+              { label: "Lead time", key: "leadTime", align: "right", render: (r) => r.leadTime + " d" },
+              { label: "Status", key: "status", render: (r) => r.current < r.safety ? pill("warn", "Below safety") : pill("bad", "Below reorder") },
+            ],
+            alerts
+          );
+        })(),
+        el("h3", { style: "margin:18px 0 10px" }, "All SKUs"),
+        dataTable(
+          [
+            { label: "SKU", key: "id" },
+            "Name",
+            { label: "ABC", key: "abc", render: (r) => pill(r.abc === "A" ? "bad" : r.abc === "B" ? "warn" : "good", "Class " + r.abc) },
+            { label: "Stock", key: "current", align: "right", render: (r) => fmt(r.current) },
+            { label: "Reorder", key: "reorder", align: "right", render: (r) => fmt(r.reorder) },
+            { label: "Safety", key: "safety", align: "right", render: (r) => fmt(r.safety) },
+            { label: "Lead (d)", key: "leadTime", align: "right", render: (r) => r.leadTime },
+            { label: "Monthly cons.", key: "monthly", align: "right", render: (r) => fmt(r.monthly) },
+            { label: "Turnover", key: "turnover", align: "right", render: (r) => fmt(r.turnover, 1) + "×" },
+            { label: "Days cover", key: "daysCover", align: "right", render: (r) => fmt(r.daysCover, 0) },
+            { label: "Value (৳)", key: "value", align: "right", render: (r) => fmt(r.value, 0) },
+            { label: "Status", key: "status", render: (r) => el("span", { style: "display:flex;align-items:center;gap:6px" }, ragDot(r.status), r.current < r.safety ? "Below safety" : r.current < r.reorder ? "Below reorder" : "OK") },
+          ],
+          c.sorted
+        ),
+        insights([
+          "Class <b>A</b> items (" + c.sorted.filter((s) => s.abc === "A").length + " SKUs) drive ~70% of annual consumption value — tighten their stock control and forecasting first.",
+          "<b>" + c.belowReorder + "</b> item(s) are below reorder point and " + c.enriched.filter((s) => s.current < s.safety).length + " are below safety stock — at risk of stock-out.",
+          "Inventory turns <b>" + fmt(c.turnover, 1) + "×/yr</b> with <b>" + fmt(c.daysCover, 0) + " days</b> of cover — " + (c.turnover >= 8 ? "healthy liquidity." : c.turnover >= 4 ? "acceptable but carrying excess stock." : "<b>slow turnover</b>; review slow movers."),
+        ]),
+        calcSection("How it's calculated", [
+          "Annual consumption value = monthly consumption × 12 × unit cost",
+          "ABC classes: cumulative share ≤70% = A, ≤90% = B, rest = C",
+          "Inventory turnover = annual consumption ÷ average inventory",
+          "Days of cover = current stock ÷ (monthly consumption ÷ 30)",
+        ], [
+          "Average inventory approximated as (current stock + reorder point) ÷ 2.",
+          "Reorder status: red = below reorder point, amber = below safety stock.",
+        ])
+      );
+
+      // ABC Pareto
+      add(paretoChart(document.getElementById("abcCanvas"), { labels: c.sorted.map((s) => s.id), values: c.sorted.map((s) => s.annualValue), valueLabel: "Annual value (৳)", yTitle: "Value (৳)" }));
+
+      // Stock vs reorder / safety
+      add(barChart(document.getElementById("stockCanvas"), {
+        labels: c.enriched.map((s) => s.id),
+        datasets: [
+          { label: "Current stock", data: c.enriched.map((s) => s.current), backgroundColor: color(0) },
+          { label: "Reorder point", data: c.enriched.map((s) => s.reorder), backgroundColor: color(4) },
+          { label: "Safety stock", data: c.enriched.map((s) => s.safety), backgroundColor: color(5) },
+        ],
+        yTitle: "Units",
+      }));
+
+      // Movement class doughnut
+      add(doughnutChart(document.getElementById("movementCanvas"), { labels: c.byMovement.map((m) => m.name), values: c.byMovement.map((m) => m.count) }));
+
+      // Days of cover horizontal bar
+      add(barChart(document.getElementById("coverCanvas"), {
+        labels: c.sorted.map((s) => s.id),
+        datasets: [{ label: "Days of cover", data: c.sorted.map((s) => +(s.daysCover).toFixed(1)), backgroundColor: c.sorted.map((s) => s.daysCover > 90 ? "#f87171" : s.daysCover > 45 ? "#fbbf24" : "#34d399") }],
+        yTitle: "Days",
+        horizontal: true,
+      }));
+    }
+
+    function setupToolbar() {
+      toolbar.append(
+        toolbarButtons({
+          onRegenerate: () => { seed = Math.floor(Math.random() * 1e8); generate(); render(); },
+          onExport: () => {
+            const c = compute();
+            downloadCSV("inventory-skus", ["SKU", "Name", "ABC", "Stock", "Reorder", "Safety", "Lead (d)", "Monthly", "Turnover", "Days cover", "Value (BDT)", "Status"],
+              c.sorted.map((r) => ({ "SKU": r.id, "Name": r.name, "ABC": r.abc, "Stock": r.current, "Reorder": r.reorder, "Safety": r.safety, "Lead (d)": r.leadTime, "Monthly": r.monthly, "Turnover": r.turnover.toFixed(1), "Days cover": Math.round(r.daysCover), "Value (BDT)": r.value, "Status": r.current < r.safety ? "Below safety" : r.current < r.reorder ? "Below reorder" : "OK" })));
+          },
+        })
+      );
+    }
+
+    generate();
+    setupToolbar();
+    render();
+  </script>
+</body>
+</html>

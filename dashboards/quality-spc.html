@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quality & SPC — Manufacturing Analytics</title>
+  <meta name="description" content="Defect Pareto, control charts with UCL/LCL and Western Electric rules, and process capability (Cp/Cpk) with histogram." />
+  <meta name="theme-color" content="#05060d" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/design-system.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <script type="module">
+    import { renderShell, el, kpiCards, insights, calcSection, card, fmt, pctStr, color, rag, pill, toolbarButtons, dataTable, downloadCSV, makeRng, addDays, fmtDate, fmtDateShort, paretoChart, barChart, lineChart, make } from "./shared/bundle.js";
+    import { LINES, SHIFTS, DEFECT_TYPES } from "./data/constants.js";
+
+    const shell = renderShell({
+      category: "Factory Departments",
+      kicker: "Factory Departments",
+      title: "Quality & SPC",
+      description: "Defect Pareto, control charts with UCL/LCL and Western Electric rules, and process capability (Cp/Cpk) with histogram.",
+    });
+    const { main, toolbar } = shell;
+
+    let seed = 20240901;
+    let records = [];
+    let measurements = [];
+    let daily = [];
+    const charts = [];
+    const DAYS = 30;
+
+    // subgroup size for X-bar / R charts
+    const N = 5;
+    const A2 = 0.577;
+    const D3 = 0;
+    const D4 = 2.114;
+    const DIAM_NOMINAL = 10.00;
+    const USL = 10.40;
+    const LSL = 9.60;
+
+    function generate() {
+      const rng = makeRng(seed);
+      const start = new Date(2024, 7, 1);
+
+      // ---- daily inspection / production & defect log ----
+      records = [];
+      daily = [];
+      let totalInspected = 0;
+      for (let d = 0; d < DAYS; d++) {
+        const date = addDays(start, d);
+        const inspected = rng.int(250, 450);
+        totalInspected += inspected;
+        const defects = rng.int(3, 14);
+        const entry = { date, inspected, defects, rejected: Math.round(defects * rng.float(0.35, 0.55)), reworked: Math.round(defects * rng.float(0.25, 0.45)) };
+        daily.push(entry);
+        for (let i = 0; i < defects; i++) {
+          records.push({
+            date,
+            line: rng.pick(LINES),
+            defectType: rng.pick(DEFECT_TYPES),
+            shift: rng.pick(SHIFTS),
+          });
+        }
+      }
+
+      // ---- measured dimension (diameter) subgroups ----
+      measurements = [];
+      const nSub = 30;
+      let mean = DIAM_NOMINAL;
+      for (let s = 0; s < nSub; s++) {
+        // inject a couple of process shifts to trigger SPC signals
+        if (s === 12) mean = DIAM_NOMINAL + 0.16;
+        if (s === 21) mean = DIAM_NOMINAL - 0.10;
+        if (s >= 12 && s < 15) mean = DIAM_NOMINAL + 0.16;
+        const vals = [];
+        for (let i = 0; i < N; i++) vals.push(rng.norm(mean, 0.12));
+        measurements.push({ subgroup: s + 1, values: vals });
+      }
+    }
+
+    function subgroupStats() {
+      return measurements.map((m) => {
+        const x = m.values.reduce((a, b) => a + b, 0) / m.values.length;
+        const range = Math.max(...m.values) - Math.min(...m.values);
+        return { subgroup: m.subgroup, xbar: x, range };
+      });
+    }
+
+    // Western Electric rules for X-bar chart; returns set of flagged subgroup indices
+    function weRules(xbars, cl, sigma) {
+      const flagged = new Set();
+      const z = xbars.map((x) => (x - cl) / sigma);
+      // Rule 1: beyond control limits
+      z.forEach((zi, i) => { if (Math.abs(zi) > 3) flagged.add(i); });
+      // Rule 2: 7 (or more) consecutive points on one side of CL
+      for (let i = 0; i <= z.length - 7; i++) {
+        let pos = true, neg = true;
+        for (let j = 0; j < 7; j++) { if (z[i + j] <= 0) pos = false; if (z[i + j] >= 0) neg = false; }
+        if (pos || neg) for (let j = 0; j < 7; j++) flagged.add(i + j);
+      }
+      // Rule 3: 2 of 3 consecutive points beyond 2-sigma (same side)
+      for (let i = 0; i <= z.length - 3; i++) {
+        for (const sgn of [1, -1]) {
+          const count = [0, 1, 2].filter((j) => z[i + j] * sgn > 2).length;
+          if (count >= 2) for (let j = 0; j < 3; j++) if (z[i + j] * sgn > 2) flagged.add(i + j);
+        }
+      }
+      // Rule 4: 4 of 5 consecutive points beyond 1-sigma (same side)
+      for (let i = 0; i <= z.length - 5; i++) {
+        for (const sgn of [1, -1]) {
+          const count = [0, 1, 2, 3, 4].filter((j) => z[i + j] * sgn > 1).length;
+          if (count >= 4) for (let j = 0; j < 5; j++) if (z[i + j] * sgn > 1) flagged.add(i + j);
+        }
+      }
+      return flagged;
+    }
+
+    function compute() {
+      const stats = subgroupStats();
+      const xbars = stats.map((s) => s.xbar);
+      const ranges = stats.map((s) => s.range);
+      const xdoublebar = xbars.reduce((a, b) => a + b, 0) / xbars.length;
+      const Rbar = ranges.reduce((a, b) => a + b, 0) / ranges.length;
+      const uclX = xdoublebar + A2 * Rbar;
+      const lclX = xdoublebar - A2 * Rbar;
+      const uclR = D4 * Rbar;
+      const lclR = D3 * Rbar;
+      const sigmaX = (uclX - xdoublebar) / 3;
+      const flaggedX = weRules(xbars, xdoublebar, sigmaX);
+      const flaggedR = weRules(ranges, Rbar, (uclR - Rbar) / 3);
+
+      // ---- capability ----
+      const allVals = measurements.flatMap((m) => m.values);
+      const mu = allVals.reduce((a, b) => a + b, 0) / allVals.length;
+      const variance = allVals.reduce((a, b) => a + (b - mu) ** 2, 0) / (allVals.length - 1);
+      const sigma = Math.sqrt(variance);
+      const Cp = (USL - LSL) / (6 * sigma);
+      const Cpk = Math.min((USL - mu) / (3 * sigma), (mu - LSL) / (3 * sigma));
+
+      // ---- defect KPIs ----
+      const totalInspected = daily.reduce((a, d) => a + d.inspected, 0);
+      const totalDefects = records.length;
+      const totalRejected = daily.reduce((a, d) => a + d.rejected, 0);
+      const totalReworked = daily.reduce((a, d) => a + d.reworked, 0);
+      const dhu = (totalDefects / (totalInspected / 100));
+      const fpy = ((totalInspected - totalDefects) / totalInspected) * 100;
+      const rejection = (totalRejected / totalInspected) * 100;
+      const rework = (totalReworked / totalInspected) * 100;
+
+      // ---- defect Pareto ----
+      const byType = DEFECT_TYPES.map((t) => ({
+        type: t,
+        count: records.filter((r) => r.defectType === t).length,
+      })).sort((a, b) => b.count - a.count);
+      let cum = 0;
+      byType.forEach((d) => { cum += d.count; d.cumPct = (cum / Math.max(totalDefects, 1)) * 100; });
+
+      // ---- daily trend ----
+      const trend = daily.map((d) => d.defects);
+
+      // ---- p-chart (fraction defective per day) ----
+      const pbar = totalDefects / totalInspected;
+      const pChart = daily.map((d) => ({
+        label: fmtDateShort(d.date),
+        p: d.defects / d.inspected,
+        ucl: pbar + 3 * Math.sqrt((pbar * (1 - pbar)) / d.inspected),
+        lcl: Math.max(0, pbar - 3 * Math.sqrt((pbar * (1 - pbar)) / d.inspected)),
+      }));
+
+      return {
+        stats, xbars, ranges, xdoublebar, Rbar, uclX, lclX, uclR, lclR, flaggedX, flaggedR,
+        mu, sigma, Cp, Cpk, allVals,
+        totalInspected, totalDefects, dhu, fpy, rejection, rework,
+        byType, trend, pbar, pChart,
+      };
+    }
+
+    function add(c) { charts.push(c); return c; }
+
+    // build an X-bar / R control chart with UCL/CL/LCL + flagged points
+    function controlChart(canvas, labels, values, cl, ucl, lcl, flagged, title) {
+      const ptRadius = values.map((_, i) => (flagged.has(i) ? 5 : 2));
+      const ptColor = values.map((_, i) => (flagged.has(i) ? "#f87171" : color(0)));
+      const constArr = (v) => values.map(() => v);
+      return make(canvas, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            { label: title, data: values, borderColor: color(0), backgroundColor: color(0), pointRadius: ptRadius, pointBackgroundColor: ptColor, borderWidth: 2, tension: 0.1 },
+            { label: "UCL", data: constArr(ucl), borderColor: "#f87171", borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0 },
+            { label: "CL", data: constArr(cl), borderColor: "#fbbf24", borderWidth: 1.5, pointRadius: 0 },
+            { label: "LCL", data: constArr(lcl), borderColor: "#f87171", borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0 },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: { legend: { position: "bottom" } },
+          scales: { x: { grid: { display: false } }, y: { beginAtZero: false } },
+        },
+      });
+    }
+
+    function render() {
+      charts.forEach((c) => c.destroy());
+      charts.length = 0;
+      const c = compute();
+
+      main.innerHTML = "";
+      main.append(
+        kpiCards([
+          { label: "DHU", value: fmt(c.dhu, 2), sub: "defects per hundred units", status: rag("dhu", c.dhu) },
+          { label: "FPY", value: pctStr(c.fpy, 2), sub: "first pass yield", status: rag("fpy", c.fpy) },
+          { label: "Rejection", value: pctStr(c.rejection, 2), sub: "scrapped units", status: rag("rejection", c.rejection) },
+          { label: "Rework", value: pctStr(c.rework, 2), sub: "reworked units", status: rag("rework", c.rework) },
+          { label: "Cp", value: fmt(c.Cp, 2), sub: "USL–LSL ÷ 6σ", status: c.Cp >= 1.33 ? "good" : c.Cp >= 1.0 ? "warn" : "bad" },
+          { label: "Cpk", value: fmt(c.Cpk, 2), sub: "process capability index", status: rag("cpk", c.Cpk) },
+        ]),
+        el("div", { class: "grid cols-2" },
+          card("Defect Pareto", "", el("div", { class: "chart-box tall" }, el("canvas", { id: "paretoCanvas" }))),
+          card("Defect trend (daily)", "", el("div", { class: "chart-box tall" }, el("canvas", { id: "trendCanvas" })))
+        ),
+        el("div", { class: "grid cols-2" },
+          card("X̄ chart (subgroup means)", "", el("div", { class: "chart-box tall" }, el("canvas", { id: "xbarCanvas" }))),
+          card("R chart (subgroup ranges)", "", el("div", { class: "chart-box tall" }, el("canvas", { id: "rCanvas" })))
+        ),
+        el("div", { class: "grid cols-2" },
+          card("p-chart (fraction defective)", "", el("div", { class: "chart-box tall" }, el("canvas", { id: "pCanvas" }))),
+          card("Process capability histogram", "", el("div", { class: "chart-box tall" }, el("canvas", { id: "histCanvas" })))
+        ),
+        el("h3", { style: "margin:18px 0 10px" }, "Defect summary by type"),
+        dataTable(
+          [
+            "Defect type",
+            { label: "Count", key: "count", align: "right", render: (r) => fmt(r.count) },
+            { label: "%", key: "pct", align: "right", render: (r) => pctStr(r.pct, 1) },
+            { label: "Cumulative %", key: "cumPct", align: "right", render: (r) => pctStr(r.cumPct, 1) },
+            { label: "Status", key: "count", render: (r) => pill(r.count >= 12 ? "bad" : r.count >= 7 ? "warn" : "good", r.count >= 12 ? "High" : r.count >= 7 ? "Moderate" : "Low") },
+          ],
+          c.byType.map((d) => ({ type: d.type, count: d.count, pct: (d.count / Math.max(c.totalDefects, 1)) * 100, cumPct: d.cumPct }))
+        ),
+        insights([
+          "Top defect type is <b>" + c.byType[0].type + "</b> at <b>" + fmt(c.byType[0].count) + "</b> defects (" + pctStr(c.byType[0].pct, 0) + "), with the top " + (c.byType.findIndex((d) => d.cumPct >= 80) + 1) + " types covering ~80% of all defects.",
+          "Cpk is <b>" + fmt(c.Cpk, 2) + "</b> — " + (c.Cpk >= 1.33 ? "capable (≥1.33)." : c.Cpk >= 1.0 ? "marginal; center the process or reduce variation." : "<b>not capable</b>; urgent process control needed."),
+          c.flaggedX.size + " subgroup(s) violate SPC rules on the X̄ chart (highlighted in red) — investigate assignable causes at subgroups " + [...c.flaggedX].slice(0, 6).join(", ") + ".",
+        ]),
+        calcSection("How it's calculated", [
+          "UCL = X̿ + A2·R̄, CL = X̿, LCL = X̿ − A2·R̄  (A2 = 0.577 for n = 5)",
+          "R chart: UCL = D4·R̄, LCL = D3·R̄  (D4 = 2.114, D3 = 0 for n = 5)",
+          "p-chart: UCL/LCL = p̄ ± 3·√(p̄(1−p̄)/n) per subgroup",
+          "Cp = (USL − LSL) / 6σ;  Cpk = min(USL − μ, μ − LSL) / 3σ",
+          "DHU = defects ÷ (units inspected / 100)",
+        ], [
+          "Western Electric rules flag: a point beyond UCL/LCL, 7 points one side of CL, 2-of-3 beyond 2σ, or 4-of-5 beyond 1σ.",
+          "σ estimated from the R chart: σ = R̄ / d2 (d2 = 2.326 for n = 5).",
+        ])
+      );
+
+      // charts
+      add(paretoChart(document.getElementById("paretoCanvas"), { labels: c.byType.map((d) => d.type), values: c.byType.map((d) => d.count), valueLabel: "Defects", yTitle: "Count" }));
+      add(lineChart(document.getElementById("trendCanvas"), { labels: daily.map((d) => fmtDateShort(d.date)), datasets: [{ label: "Defects / day", data: c.trend }], yTitle: "Defects", fill: true }));
+
+      const labels = c.stats.map((s) => "SG " + s.subgroup);
+      add(controlChart(document.getElementById("xbarCanvas"), labels, c.xbars, c.xdoublebar, c.uclX, c.lclX, c.flaggedX, "X̄"));
+      add(controlChart(document.getElementById("rCanvas"), labels, c.ranges, c.Rbar, c.uclR, c.lclR, c.flaggedR, "R"));
+
+      // p-chart
+      add(make(document.getElementById("pCanvas"), {
+        type: "line",
+        data: {
+          labels: c.pChart.map((p) => p.label),
+          datasets: [
+            { label: "p (fraction defective)", data: c.pChart.map((p) => +(p.p).toFixed(4)), borderColor: color(0), backgroundColor: color(0), pointRadius: 2, borderWidth: 2, tension: 0.2 },
+            { label: "UCL", data: c.pChart.map((p) => +(p.ucl).toFixed(4)), borderColor: "#f87171", borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0 },
+            { label: "p̄", data: c.pChart.map(() => +(c.pbar).toFixed(4)), borderColor: "#fbbf24", borderWidth: 1.5, pointRadius: 0 },
+            { label: "LCL", data: c.pChart.map((p) => +(p.lcl).toFixed(4)), borderColor: "#f87171", borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0 },
+          ],
+        },
+        options: { responsive: true, maintainAspectRatio: false, interaction: { mode: "index", intersect: false }, plugins: { legend: { position: "bottom" } }, scales: { x: { grid: { display: false } }, y: { beginAtZero: true } } },
+      }));
+
+      // histogram with normal curve + spec limits
+      (() => {
+        const canvas = document.getElementById("histCanvas");
+        const nBins = 20;
+        const min = Math.min(...c.allVals), max = Math.max(...c.allVals);
+        const w = (max - min) / nBins;
+        const counts = new Array(nBins).fill(0);
+        for (const v of c.allVals) {
+          let idx = Math.floor((v - min) / w);
+          if (idx >= nBins) idx = nBins - 1;
+          counts[idx]++;
+        }
+        const binLabels = counts.map((_, i) => (min + i * w + w / 2).toFixed(2));
+        // normal curve scaled to histogram count
+        const pdfScale = c.allVals.length * w;
+        const normal = counts.map((_, i) => {
+          const x = min + i * w + w / 2;
+          const z = (x - c.mu) / c.sigma;
+          return (1 / (c.sigma * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * z * z) * pdfScale;
+        });
+        const specLine = (v) => counts.map(() => v);
+        add(make(canvas, {
+          data: {
+            labels: binLabels,
+            datasets: [
+              { type: "bar", label: "Frequency", data: counts, backgroundColor: colorAlpha(0, 0.5), yAxisID: "y", borderRadius: 2 },
+              { type: "line", label: "Normal fit", data: normal, borderColor: "#fbbf24", pointRadius: 0, borderWidth: 2, yAxisID: "y" },
+              { type: "line", label: "LSL " + LSL, data: specLine(LSL), borderColor: "#f87171", borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0, xAxisID: "x", yAxisID: "y" },
+              { type: "line", label: "USL " + USL, data: specLine(USL), borderColor: "#f87171", borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0, yAxisID: "y" },
+            ],
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom" } }, scales: { x: { grid: { display: false }, title: { display: true, text: "Diameter (mm)" } }, y: { beginAtZero: true, title: { display: true, text: "Frequency" } } } },
+        }));
+      })();
+    }
+
+    function colorAlpha(i, a) { const h = color(i).replace("#", ""); const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16); return `rgba(${r},${g},${b},${a})`; }
+
+    function setupToolbar() {
+      toolbar.append(
+        toolbarButtons({
+          onRegenerate: () => { seed = Math.floor(Math.random() * 1e8); generate(); render(); },
+          onExport: () => {
+            downloadCSV("quality-defect-log", ["Date", "Line", "Shift", "Defect type"],
+              records.map((r) => ({ "Date": fmtDate(r.date), "Line": r.line, "Shift": r.shift, "Defect type": r.defectType })));
+          },
+        })
+      );
+    }
+
+    generate();
+    setupToolbar();
+    render();
+  </script>
+</body>
+</html>

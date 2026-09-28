@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Line Balancing Simulator — Manufacturing Analytics</title>
+  <meta name="description" content="Interactive line balancing simulator: takt time, workstation load, bottleneck and balance efficiency with live operation reassignment." />
+  <meta name="theme-color" content="#05060d" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/design-system.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <script type="module">
+    import { renderShell, el, kpiCards, insights, calcSection, card, fmt, pctStr, make, color, rag, toolbarButtons } from "./shared/bundle.js";
+
+    const shell = renderShell({
+      category: "Lean / Industrial Engineering",
+      kicker: "Lean / Industrial Engineering",
+      title: "Line Balancing Simulator",
+      description: "Compute takt time, workstation loading, bottleneck and balance efficiency for an assembly line — then reassign operations between stations and watch the balance improve in real time.",
+    });
+    const { main, toolbar } = shell;
+
+    const opsBase = [
+      { name: "Coil winding", smv: 0.40, machine: "Winding Machine" },
+      { name: "Bimetal assembly", smv: 0.35, machine: "Manual bench" },
+      { name: "Contact assembly", smv: 0.50, machine: "Press" },
+      { name: "Arc chamber", smv: 0.30, machine: "Manual bench" },
+      { name: "Housing assembly", smv: 0.45, machine: "Press" },
+      { name: "Terminal fixing", smv: 0.25, machine: "Screwdriver jig" },
+      { name: "Calibration", smv: 0.55, machine: "Test rig" },
+      { name: "Final testing", smv: 0.40, machine: "Test rig" },
+      { name: "Packing", smv: 0.20, machine: "Packing bench" },
+    ];
+    const initialStations = [1, 1, 1, 2, 2, 3, 3, 4, 4];
+
+    let state = {
+      target: 1200, hours: 8, eff: 0.85,
+      ops: opsBase.map((o, i) => ({ ...o, station: initialStations[i], operators: 1 })),
+    };
+    let beforeEff = null;
+    const MAX_STATIONS = 6;
+
+    function taktMin() { return (state.hours * 60) / state.target; }
+    function stationTimes() {
+      const m = {};
+      for (const o of state.ops) {
+        const t = o.smv / (o.operators || 1);
+        m[o.station] = (m[o.station] || 0) + t;
+      }
+      return m;
+    }
+    function compute() {
+      const takt = taktMin();
+      const st = stationTimes();
+      const stations = Math.max(...state.ops.map((o) => o.station));
+      const total = Object.values(st).reduce((a, b) => a + b, 0);
+      const bottleneckTime = Math.max(...Object.values(st));
+      const bottleneck = state.ops.find((o) => st[o.station] === bottleneckTime)?.station;
+      const balanceEff = total / (stations * bottleneckTime) * 100;
+      const minWS = Math.ceil(total / takt);
+      return { takt, st, stations, total, bottleneckTime, bottleneck, balanceEff, minWS, cycleTarget: takt * state.eff };
+    }
+
+    let chart = null;
+
+    function renderChart(c) {
+      const stations = Array.from({ length: c.stations }, (_, i) => i + 1);
+      const loads = stations.map((s) => c.st[s] || 0);
+      const taktLine = Array(stations.length).fill(c.takt);
+      const canvas = document.getElementById("balChart");
+      if (chart) chart.destroy();
+      chart = make(canvas, {
+        type: "bar",
+        data: {
+          labels: stations.map((s) => "Station " + s),
+          datasets: [
+            {
+              type: "bar",
+              label: "Cycle time (min)",
+              data: loads,
+              backgroundColor: loads.map((v) => (v >= c.takt * 0.999 ? "#f87171" : color(0))),
+              borderRadius: 5,
+              yAxisID: "y",
+            },
+            {
+              type: "line",
+              label: "Takt time",
+              data: taktLine,
+              borderColor: "#fbbf24",
+              borderDash: [6, 4],
+              borderWidth: 2,
+              pointRadius: 0,
+              yAxisID: "y",
+            },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: "bottom" } },
+          scales: {
+            y: { beginAtZero: true, title: { display: true, text: "Minutes per unit" } },
+            x: { grid: { display: false } },
+          },
+        },
+      });
+    }
+
+    function render() {
+      const c = compute();
+      if (beforeEff === null) beforeEff = c.balanceEff;
+
+      main.innerHTML = "";
+      main.append(
+        kpiCards([
+          { label: "Takt time", value: c.takt.toFixed(2) + " min", sub: (c.takt * 60).toFixed(0) + " sec / unit", status: "good" },
+          { label: "Bottleneck station", value: "Station " + c.bottleneck, sub: c.bottleneckTime.toFixed(2) + " min", status: c.bottleneckTime > c.takt ? "bad" : "good" },
+          { label: "Line balance", value: pctStr(c.balanceEff), sub: "efficiency", status: rag("balance", c.balanceEff) },
+          { label: "Balance loss", value: pctStr(100 - c.balanceEff), sub: "idle / waiting", status: (100 - c.balanceEff) > 20 ? "bad" : "good" },
+          { label: "Theoretical min WS", value: c.minWS, sub: "workstations", status: "good" },
+          { label: "Planned cycle", value: c.cycleTarget.toFixed(2) + " min", sub: "at " + pctStr(c.eff * 100, 0) + " efficiency" },
+        ]),
+        el("div", { class: "grid cols-2" },
+          card("Workstation load vs takt", "", el("div", { class: "chart-box" }, el("canvas", { id: "balChart" }))),
+          card("Before vs after balance", "",
+            el("div", { class: "kpis" },
+              el("div", { class: "kpi" }, el("div", { class: "lab" }, "Before (initial)"), el("div", { class: "val" }, pctStr(beforeEff)), el("div", { class: "sub" }, "unbalanced assignment")),
+              el("div", { class: "kpi", "data-status": "good" }, el("div", { class: "lab" }, "After (current)"), el("div", { class: "val" }, pctStr(c.balanceEff)), el("div", { class: "sub" }, (c.balanceEff - beforeEff >= 0 ? "+" : "") + (c.balanceEff - beforeEff).toFixed(1) + " pp vs before")),
+            ),
+            el("div", { class: "insights" },
+              el("h3", {}, "How to balance"),
+              el("ul",
+                el("li", { html: "Move work from <b>Station " + c.bottleneck + "</b> (heaviest) to stations with spare capacity to lift balance %." }),
+                el("li", { html: "Target: every station cycle time ≤ <b>takt " + c.takt.toFixed(2) + " min</b> to meet " + fmt(state.target) + " units/day." }),
+                el("li", { html: "Adding an operator at the bottleneck divides its SMV, effectively halving that station's cycle time." }),
+              )
+            )
+          )
+        ),
+        el("h3", { style: "margin:18px 0 10px" }, "Operations — reassign stations or edit SMV / operators"),
+        buildOpsTable(),
+        insights([
+          "The current balance is <b>" + pctStr(c.balanceEff) + "</b> with <b>" + pctStr(100 - c.balanceEff) + "</b> balance loss — " + (100 - c.balanceEff > 20 ? "there is meaningful idle time to recover." : "within a reasonable range."),
+          "Bottleneck is <b>Station " + c.bottleneck + "</b> at " + c.bottleneckTime.toFixed(2) + " min, which is " + (c.bottleneckTime > c.takt ? "<b>above takt</b> — the line cannot meet target at current state." : "at or below takt."),
+          "Minimum " + c.minWS + " workstations are needed in theory vs " + c.stations + " currently assigned.",
+        ]),
+        calcSection("How it's calculated", [
+          "Takt time (min/unit) = Working hours × 60 ÷ Target output/day",
+          "Station cycle time = Σ (SMV ÷ operators assigned) for operations in that station",
+          "Line balance efficiency (%) = Σ(station cycle times) ÷ (No. of stations × bottleneck cycle time) × 100",
+          "Balance loss (%) = 100 − line balance efficiency",
+          "Theoretical min workstations = Σ(SMV) ÷ takt time (rounded up)",
+        ], [
+          "SMV = Standard Minute Value, the standard time for one qualified operator to complete one cycle.",
+          "Efficiency % is applied to takt to derive the planned (paced) cycle time.",
+        ])
+      );
+
+      renderChart(c);
+    }
+
+    function buildOpsTable() {
+      const scroll = el("div", { class: "table-scroll" });
+      const table = el("table", { class: "data" });
+      const thead = el("thead");
+      thead.append(el("tr",
+        el("th", {}, "#"), el("th", {}, "Operation"), el("th", {}, "Machine"),
+        el("th", { class: "num" }, "SMV (min)"), el("th", { class: "num" }, "Operators"), el("th", {}, "Station"),
+        el("th", { class: "num" }, "Effective (min)")
+      ));
+      table.append(thead);
+      const tbody = el("tbody");
+      state.ops.forEach((o, i) => {
+        const smvInput = el("input", { type: "number", min: "0.05", step: "0.05", value: o.smv, style: "width:80px;padding:6px;border-radius:8px;border:1px solid var(--border);background:var(--bg-2);color:var(--text)" });
+        smvInput.addEventListener("change", () => { o.smv = Math.max(0.05, Number(smvInput.value) || 0.05); render(); });
+        const opInput = el("input", { type: "number", min: "1", step: "1", value: o.operators, style: "width:70px;padding:6px;border-radius:8px;border:1px solid var(--border);background:var(--bg-2);color:var(--text)" });
+        opInput.addEventListener("change", () => { o.operators = Math.max(1, Math.round(Number(opInput.value) || 1)); render(); });
+        const stSelect = el("select", { style: "padding:6px;border-radius:8px;border:1px solid var(--border);background:var(--bg-2);color:var(--text)" },
+          ...Array.from({ length: MAX_STATIONS }, (_, s) => el("option", { value: s + 1, selected: o.station === s + 1 ? "" : null }, "Station " + (s + 1)))
+        );
+        stSelect.addEventListener("change", () => { o.station = Number(stSelect.value); render(); });
+        const eff = (o.smv / o.operators).toFixed(2);
+        tbody.append(el("tr",
+          el("td", {}, i + 1),
+          el("td", {}, o.name),
+          el("td", {}, o.machine),
+          el("td", { class: "num" }, smvInput),
+          el("td", { class: "num" }, opInput),
+          el("td", {}, stSelect),
+          el("td", { class: "num" }, eff)
+        ));
+      });
+      table.append(tbody);
+      scroll.append(table);
+      return scroll;
+    }
+
+    function setupToolbar() {
+      toolbar.append(
+        toolbarButtons({
+          onRegenerate: () => { state.target = 1200; state.hours = 8; state.eff = 0.85; state.ops = opsBase.map((o, i) => ({ ...o, station: initialStations[i], operators: 1 })); beforeEff = null; render(); },
+          onExport: () => {},
+        })
+      );
+      toolbar.append(
+        el("div", { class: "filterbar", style: "flex:1 1 100%" },
+          el("div", { class: "field" }, el("label", {}, "Target output / day"), buildInput("target", 500, 5000, 100)),
+          el("div", { class: "field" }, el("label", {}, "Working hours / day"), buildInput("hours", 6, 12, 1)),
+          el("div", { class: "field" }, el("label", {}, "Efficiency %"), buildInput("eff", 70, 100, 5, true)),
+        )
+      );
+    }
+    function buildInput(key, min, max, step, isPct) {
+      const input = el("input", { type: "range", min, max, step, value: isPct ? state[key] * 100 : state[key], style: "width:100%" });
+      input.addEventListener("input", () => {
+        const v = Number(input.value);
+        state[key] = isPct ? v / 100 : v;
+        render();
+      });
+      return el("div", { style: "display:flex;align-items:center;gap:8px" }, input, el("span", { class: "range-val" }, isPct ? input.value + "%" : input.value));
+    }
+
+    setupToolbar();
+    render();
+  </script>
+</body>
+</html>

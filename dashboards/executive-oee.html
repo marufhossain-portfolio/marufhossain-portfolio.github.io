@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Executive OEE & Loss — Manufacturing Analytics</title>
+  <meta name="description" content="Plant-wide OEE with availability/performance/quality loss tree and month-over-month waterfall." />
+  <meta name="theme-color" content="#05060d" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/design-system.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <script type="module">
+    import { renderShell, el, kpiCards, insights, calcSection, card, fmt, pctStr, make, color, rag, pill, toolbarButtons, dataTable, downloadCSV, makeRng, lineChart, barChart } from "./shared/bundle.js";
+    import { LINES, MONTHS } from "./data/constants.js";
+
+    const shell = renderShell({
+      category: "Executive Level",
+      kicker: "Executive Level",
+      title: "Executive OEE & Loss",
+      description: "Plant-wide OEE with availability/performance/quality loss tree and month-over-month waterfall.",
+    });
+    const { main, toolbar } = shell;
+
+    let seed = 20241101;
+    let filter = { line: "All", monthFrom: 0, monthTo: 11 };
+    let data = [];
+    const charts = [];
+    const TARGET = 85;
+
+    function generate() {
+      const rng = makeRng(seed);
+      return LINES.map((name, li) => {
+        const aBase = rng.float(88, 94);
+        const pBase = rng.float(84, 92);
+        const qBase = rng.float(94, 98);
+        const months = MONTHS.map((m, mi) => {
+          const drift = Math.sin((mi / 11) * Math.PI) * rng.float(0, 2);
+          const a = Math.min(99, aBase + drift + rng.norm(0, 1.2));
+          const p = Math.min(98, pBase + rng.norm(0, 1.5));
+          const q = Math.min(99.9, qBase + rng.norm(0, 0.6));
+          const oee = (a / 100) * (p / 100) * (q / 100) * 100;
+          return { a, p, q, oee };
+        });
+        return { name, months };
+      });
+    }
+
+    function selectedLines() {
+      return filter.line === "All" ? data : data.filter((l) => l.name === filter.line);
+    }
+    function monthRange() {
+      return MONTHS.map((_, i) => i).filter((i) => i >= filter.monthFrom && i <= filter.monthTo);
+    }
+
+    function compute() {
+      const lines = selectedLines();
+      const range = monthRange();
+      const vals = [];
+      lines.forEach((l) => range.forEach((mi) => vals.push(l.months[mi])));
+      const avg = (k) => vals.length ? vals.reduce((a, v) => a + v[k], 0) / vals.length : 0;
+      const a = avg("a"), p = avg("p"), q = avg("q");
+      const oee = (a / 100) * (p / 100) * (q / 100) * 100;
+
+      const oeeByLine = lines.map((l) => {
+        const ms = range.map((mi) => l.months[mi]);
+        const av = ms.reduce((x, m) => x + m.oee, 0) / ms.length;
+        return { name: l.name, oee: av, a: ms.reduce((x, m) => x + m.a, 0) / ms.length, p: ms.reduce((x, m) => x + m.p, 0) / ms.length, q: ms.reduce((x, m) => x + m.q, 0) / ms.length };
+      });
+
+      const oeeByMonth = range.map((mi) => {
+        const ms = lines.map((l) => l.months[mi]);
+        return ms.reduce((x, m) => x + m.oee, 0) / ms.length;
+      });
+
+      const latest = range[range.length - 1];
+      const tableRows = lines.map((l) => {
+        const m = l.months[latest];
+        const oee = (m.a / 100) * (m.p / 100) * (m.q / 100) * 100;
+        return { name: l.name, a: m.a, p: m.p, q: m.q, oee };
+      });
+
+      const aDec = a / 100, pDec = p / 100, qDec = q / 100;
+      const loss = {
+        availabilityLoss: (1 - aDec) * 100,
+        performanceLoss: aDec * (1 - pDec) * 100,
+        qualityLoss: aDec * pDec * (1 - qDec) * 100,
+        oee: aDec * pDec * qDec * 100,
+      };
+
+      return { a, p, q, oee, oeeByLine, oeeByMonth, range, tableRows, loss };
+    }
+
+    function render() {
+      charts.forEach((c) => c.destroy());
+      charts.length = 0;
+      const c = compute();
+
+      main.innerHTML = "";
+      main.append(
+        kpiCards([
+          { label: "Overall OEE", value: pctStr(c.oee), sub: "A × P × Q", status: rag("oee", c.oee) },
+          { label: "Availability", value: pctStr(c.a), sub: "run ÷ planned", status: rag("availability", c.a) },
+          { label: "Performance", value: pctStr(c.p), sub: "ideal vs actual", status: rag("performance", c.p) },
+          { label: "Quality", value: pctStr(c.q), sub: "good ÷ total", status: rag("quality", c.q) },
+        ]),
+        el("div", { class: "grid cols-2" },
+          card("OEE trend (12 months)", "", el("div", { class: "chart-box" }, el("canvas", { id: "oeeTrend" }))),
+          card("OEE by line", "", el("div", { class: "chart-box" }, el("canvas", { id: "oeeByLine" })))
+        ),
+        el("div", { class: "grid cols-2" },
+          card("OEE loss tree", "", el("div", { class: "chart-box" }, el("canvas", { id: "lossTree" }))),
+          card("Month-over-month OEE waterfall", "", el("div", { class: "chart-box" }, el("canvas", { id: "waterfall" })))
+        ),
+        el("h3", { style: "margin:18px 0 10px" }, "Line-level OEE (latest selected month)"),
+        dataTable(
+          [
+            "Line",
+            { label: "Availability %", key: "a", align: "right", render: (r) => pctStr(r.a) },
+            { label: "Performance %", key: "p", align: "right", render: (r) => pctStr(r.p) },
+            { label: "Quality %", key: "q", align: "right", render: (r) => pctStr(r.q) },
+            { label: "OEE %", key: "oee", align: "right", render: (r) => pctStr(r.oee) },
+            { label: "Status", key: "oee", render: (r) => pill(rag("oee", r.oee), rag("oee", r.oee) === "good" ? "Good" : rag("oee", r.oee) === "warn" ? "Watch" : "Poor") },
+          ],
+          c.tableRows
+        ),
+        insights([
+          "Plant OEE is <b>" + pctStr(c.oee) + "</b>, " + (c.oee >= TARGET ? "at or above the " + TARGET + "% target." : "below the " + TARGET + "% target — the largest loss is " + (c.loss.availabilityLoss >= c.loss.performanceLoss && c.loss.availabilityLoss >= c.loss.qualityLoss ? "<b>availability</b> (" + pctStr(c.loss.availabilityLoss) + ")" : c.loss.performanceLoss >= c.loss.qualityLoss ? "<b>performance</b> (" + pctStr(c.loss.performanceLoss) + ")" : "<b>quality</b> (" + pctStr(c.loss.qualityLoss) + ")") + "."),
+          "Availability loss is " + pctStr(c.loss.availabilityLoss) + ", performance loss " + pctStr(c.loss.performanceLoss) + ", quality loss " + pctStr(c.loss.qualityLoss) + " — sum of losses plus OEE equals 100%.",
+          (() => { const best = [...c.oeeByLine].sort((a, b) => b.oee - a.oee)[0]; const worst = [...c.oeeByLine].sort((a, b) => a.oee - b.oee)[0]; return best && worst ? "Best line: <b>" + best.name + "</b> (" + pctStr(best.oee) + "), worst: <b>" + worst.name + "</b> (" + pctStr(worst.oee) + ")." : ""; })(),
+        ]),
+        calcSection("How it's calculated", [
+          "OEE = Availability × Performance × Quality",
+          "Availability = run time ÷ planned time",
+          "Performance = (ideal cycle time × units) ÷ run time",
+          "Quality = good units ÷ total units",
+        ], [
+          "Loss tree splits 100% into availability loss, performance loss, quality loss and remaining OEE.",
+          "Waterfall shows month-over-month change in plant OEE (green = up, red = down).",
+          "Synthetic demo data — seeded for reproducibility.",
+        ])
+      );
+
+      renderCharts(c);
+    }
+
+    function renderCharts(c) {
+      const monthLabels = c.range.map((mi) => MONTHS[mi]);
+
+      const t1 = lineChart(document.getElementById("oeeTrend"), {
+        labels: monthLabels,
+        datasets: [
+          { label: "OEE %", data: c.oeeByMonth.map((v) => +v.toFixed(1)), color: color(0), fill: true },
+          { label: "Target (" + TARGET + "%)", data: monthLabels.map(() => TARGET), color: "#fbbf24", fill: false },
+        ],
+        yTitle: "OEE %",
+      });
+      charts.push(t1);
+
+      const t2 = barChart(document.getElementById("oeeByLine"), {
+        labels: c.oeeByLine.map((r) => r.name),
+        datasets: [{ label: "OEE %", data: c.oeeByLine.map((r) => +r.oee.toFixed(1)), backgroundColor: c.oeeByLine.map((r) => (r.oee >= 85 ? "#34d399" : r.oee >= 70 ? "#fbbf24" : "#f87171")), borderRadius: 4 }],
+        yTitle: "OEE %",
+      });
+      charts.push(t2);
+
+      const t3 = barChart(document.getElementById("lossTree"), {
+        labels: ["Plant"],
+        datasets: [
+          { label: "Quality loss", data: [+c.loss.qualityLoss.toFixed(1)], backgroundColor: "#f87171" },
+          { label: "Performance loss", data: [+c.loss.performanceLoss.toFixed(1)], backgroundColor: "#fbbf24" },
+          { label: "Availability loss", data: [+c.loss.availabilityLoss.toFixed(1)], backgroundColor: "#fb923c" },
+          { label: "OEE", data: [+c.loss.oee.toFixed(1)], backgroundColor: "#34d399" },
+        ],
+        stacked: true,
+        horizontal: true,
+      });
+      charts.push(t3);
+
+      const wf = make(document.getElementById("waterfall"), {
+        type: "bar",
+        data: {
+          labels: monthLabels,
+          datasets: [{
+            label: "OEE %",
+            data: c.oeeByMonth.map((v, i) => (i === 0 ? [0, v] : [c.oeeByMonth[i - 1], v])),
+            backgroundColor: c.oeeByMonth.map((v, i) => (i === 0 ? color(0) : v >= c.oeeByMonth[i - 1] ? "#34d399" : "#f87171")),
+            borderRadius: 3,
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: { x: { stacked: false }, y: { beginAtZero: true, title: { display: true, text: "OEE %" } } },
+        },
+      });
+      charts.push(wf);
+    }
+
+    function setupToolbar() {
+      toolbar.append(
+        toolbarButtons({
+          onRegenerate: () => { seed = Math.floor(Math.random() * 1e8); data = generate(); render(); },
+          onExport: () => {
+            const c = compute();
+            downloadCSV("executive-oee", ["Line", "Availability %", "Performance %", "Quality %", "OEE %", "Status"],
+              c.tableRows.map((r) => ({ "Line": r.name, "Availability %": r.a.toFixed(1), "Performance %": r.p.toFixed(1), "Quality %": r.q.toFixed(1), "OEE %": r.oee.toFixed(1), "Status": rag("oee", r.oee) })));
+          },
+        })
+      );
+
+      const lineSelect = el("select", {},
+        el("option", { value: "All", selected: "" }, "All lines"),
+        ...LINES.map((l) => el("option", { value: l }, l))
+      );
+      lineSelect.addEventListener("change", () => { filter.line = lineSelect.value; render(); });
+
+      const fromSel = el("select", {}, ...MONTHS.map((m, i) => el("option", { value: i, selected: i === 0 ? "" : null }, m)));
+      fromSel.addEventListener("change", () => { filter.monthFrom = Number(fromSel.value); if (filter.monthFrom > filter.monthTo) filter.monthTo = filter.monthFrom; render(); });
+      const toSel = el("select", {}, ...MONTHS.map((m, i) => el("option", { value: i, selected: i === 11 ? "" : null }, m)));
+      toSel.addEventListener("change", () => { filter.monthTo = Number(toSel.value); if (filter.monthTo < filter.monthFrom) filter.monthFrom = filter.monthTo; render(); });
+
+      toolbar.append(
+        el("div", { class: "filterbar", style: "flex:1 1 100%" },
+          el("div", { class: "field" }, el("label", {}, "Line"), lineSelect),
+          el("div", { class: "field" }, el("label", {}, "From month"), fromSel),
+          el("div", { class: "field" }, el("label", {}, "To month"), toSel)
+        )
+      );
+    }
+
+    data = generate();
+    setupToolbar();
+    render();
+  </script>
+</body>
+</html>

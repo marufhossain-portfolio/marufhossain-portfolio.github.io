@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Production Plan vs Actual — Manufacturing Analytics</title>
+  <meta name="description" content="Hourly and daily output vs target by line and SKU, with achievement and efficiency." />
+  <meta name="theme-color" content="#05060d" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/design-system.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <script type="module">
+    import { renderShell, el, kpiCards, insights, calcSection, card, fmt, pctStr, rag, pill, filterBar, dataTable, toolbarButtons, downloadCSV, lineChart, barChart, color, makeRng, LINES, SKUS, SHIFTS } from "./shared/bundle.js";
+
+    const shell = renderShell({
+      category: "Factory Departments",
+      kicker: "Factory Departments",
+      title: "Production Plan vs Actual",
+      description: "Hourly and daily output vs target by line and SKU, with achievement and efficiency.",
+    });
+    const { main, toolbar } = shell;
+
+    const lines = LINES.map((name, i) => ({
+      name,
+      sku: SKUS[i % SKUS.length],
+      manpower: [14, 12, 16, 11, 15, 13][i],
+      smv: SKUS[i % SKUS.length].smv,
+    }));
+
+    let seed = 99;
+    let data = buildData(seed);
+
+    function buildData(seed) {
+      const rng = makeRng(seed);
+      const perLine = lines.map((ln) => {
+        const hourlyTarget = Math.round((ln.manpower * 60 * 0.85) / ln.smv / 8);
+        const hourly = [];
+        for (let h = 0; h < 24; h++) {
+          const shift = h < 8 ? 0 : h < 16 ? 1 : 2;
+          const shiftEff = [1.0, 0.95, 0.88][shift];
+          const actual = Math.max(0, Math.round(hourlyTarget * shiftEff * rng.norm(1, 0.12)));
+          hourly.push({ h, shift, plan: hourlyTarget, actual });
+        }
+        const daily = [];
+        for (let d = 0; d < 30; d++) {
+          const plan = hourlyTarget * 24;
+          const actual = Math.round(plan * rng.norm(0.92, 0.1));
+          daily.push({ d, plan, actual });
+        }
+        return { name: ln.name, sku: ln.sku, manpower: ln.manpower, smv: ln.smv, hourly, daily };
+      });
+      return { perLine, date: new Date() };
+    }
+
+    let filters = { line: "All lines", shift: "All shifts" };
+
+    function applyFilters() {
+      const linesSubset = filters.line === "All lines" ? data.perLine : data.perLine.filter((l) => l.name === filters.line);
+      return linesSubset;
+    }
+
+    function computeSummary(subset) {
+      let plan = 0, actual = 0, wip = 0, manHours = 0;
+      for (const ln of subset) {
+        for (const d of ln.daily) { plan += d.plan; actual += d.actual; }
+        wip += ln.manpower * 3;
+        manHours += ln.manpower * 24 * 30;
+      }
+      const achievement = plan > 0 ? (actual / plan) * 100 : 0;
+      const smvHours = subset.reduce((a, ln) => a + (ln.smv * (ln.daily.reduce((s, d) => s + d.actual, 0))), 0) / 60;
+      const efficiency = manHours > 0 ? (smvHours / manHours) * 100 : 0;
+      const util = efficiency * 0.92;
+      return { plan, actual, achievement, efficiency, wip, util };
+    }
+
+    function render() {
+      const subset = applyFilters();
+      const c = computeSummary(subset);
+      main.innerHTML = "";
+
+      main.append(buildFilterBar());
+
+      main.append(
+        kpiCards([
+          { label: "Achievement", value: pctStr(c.achievement, 1), sub: fmt(c.actual) + " / " + fmt(c.plan) + " units", status: rag("achievement", c.achievement) },
+          { label: "Efficiency", value: pctStr(c.efficiency, 1), sub: "SMV vs available hours", status: rag("efficiency", c.efficiency) },
+          { label: "WIP on floor", value: fmt(c.wip), sub: "units in process", status: c.wip > 1500 ? "warn" : "good" },
+          { label: "Manpower utilization", value: pctStr(c.util, 1), sub: "effective labour use", status: rag("utilization", c.util) },
+        ])
+      );
+
+      main.append(
+        el("div", { class: "grid cols-2" },
+          card("Hourly output vs target (24h)", "", el("div", { class: "chart-box" }, el("canvas", { id: "hourlyChart" }))),
+          card("Line achievement", "", el("div", { class: "chart-box" }, el("canvas", { id: "lineChart" })))
+        )
+      );
+
+      main.append(
+        el("div", { class: "grid cols-2" },
+          card("Shift comparison", "", el("div", { class: "chart-box" }, el("canvas", { id: "shiftChart" }))),
+          card("Daily trend", "", el("div", { class: "chart-box" }, el("canvas", { id: "dailyChart" })))
+        )
+      );
+
+      main.append(el("h3", { style: "margin:18px 0 10px" }, "Plan vs actual by line"));
+      main.append(renderTable(subset));
+
+      main.append(insights([
+        "Overall achievement is <b>" + pctStr(c.achievement, 1) + "</b> — " + (c.achievement >= 100 ? "at or above plan." : c.achievement >= 90 ? "slightly below plan." : "significantly below plan — investigate bottlenecks."),
+        "Efficiency of <b>" + pctStr(c.efficiency, 1) + "</b> means " + pctStr(100 - c.efficiency, 1) + " of available hours are lost to non-value-added time.",
+        worstLine(subset) + " is the weakest performer at " + pctStr(worstAch(), 1) + " achievement.",
+      ]));
+
+      main.append(calcSection("How it's calculated", [
+        "Achievement % = actual output ÷ planned output × 100",
+        "Efficiency % = (actual output × SMV) ÷ (available hours × 60 × manpower) × 100",
+        "Manpower utilization ≈ efficiency adjusted for attendance & downtime",
+      ], [
+        "SMV (Standard Minute Value) comes from the SKU reference data.",
+        "Available hours assume 24h × 30 days per line; hourly target is derived from line manpower, SMV and an 85% pace.",
+      ]));
+
+      renderCharts(subset);
+    }
+
+    function buildFilterBar() {
+      const fb = filterBar([
+        { key: "line", type: "select", label: "Line", options: ["All lines", ...data.perLine.map((l) => l.name)] },
+        { key: "shift", type: "select", label: "Shift", options: ["All shifts", ...SHIFTS] },
+        { key: "date", type: "date", label: "Date", value: "2026-09-28" },
+      ], (state) => {
+        filters = state;
+        render();
+      });
+      return fb.el;
+    }
+
+    function renderTable(subset) {
+      const cols = [
+        { label: "Line", key: "name" },
+        { label: "SKU", key: "sku", render: (r) => r.sku.id + " · " + r.sku.name },
+        { label: "Plan (units)", key: "plan", align: "right", render: (r) => fmt(r.plan) },
+        { label: "Actual (units)", key: "actual", align: "right", render: (r) => fmt(r.actual) },
+        { label: "Variance", key: "variance", align: "right", render: (r) => (r.variance >= 0 ? "+" : "") + fmt(r.variance) },
+        { label: "Achievement %", key: "achievement", align: "right", render: (r) => pctStr(r.achievement, 1) },
+        { label: "Status", key: "status", render: (r) => pill(rag("achievement", r.achievement), r.achievement >= 100 ? "On/ahead" : r.achievement >= 90 ? "Behind" : "Critical") },
+      ];
+      const rows = subset.map((ln) => {
+        const plan = ln.daily.reduce((a, d) => a + d.plan, 0);
+        const actual = ln.daily.reduce((a, d) => a + d.actual, 0);
+        const achievement = (actual / plan) * 100;
+        return { name: ln.name, sku: ln.sku, plan, actual, variance: actual - plan, achievement };
+      });
+      return dataTable(cols, rows);
+    }
+
+    function renderCharts(subset) {
+      const labels24 = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0") + ":00");
+      const actualSeries = labels24.map((_, h) => subset.reduce((a, ln) => a + ln.hourly[h].actual, 0));
+      const planSeries = labels24.map((_, h) => subset.reduce((a, ln) => a + ln.hourly[h].plan, 0));
+      lineChart(document.getElementById("hourlyChart"), {
+        labels: labels24,
+        datasets: [
+          { label: "Actual output", data: actualSeries, color: color(0) },
+          { label: "Target", data: planSeries, color: "#fbbf24" },
+        ],
+        yTitle: "Units / hour",
+      });
+
+      const lineNames = subset.map((l) => l.name);
+      const ach = subset.map((l) => {
+        const plan = l.daily.reduce((a, d) => a + d.plan, 0);
+        const actual = l.daily.reduce((a, d) => a + d.actual, 0);
+        return (actual / plan) * 100;
+      });
+      barChart(document.getElementById("lineChart"), {
+        labels: lineNames,
+        datasets: [{ label: "Achievement %", data: ach, backgroundColor: ach.map((v) => v >= 100 ? "#34d399" : v >= 90 ? "#fbbf24" : "#f87171") }],
+        yTitle: "Achievement %",
+        horizontal: true,
+      });
+
+      const shiftLabels = SHIFTS;
+      const shiftActual = [0, 1, 2].map((s) => subset.reduce((a, ln) => a + ln.hourly.filter((h) => h.shift === s).reduce((x, h) => x + h.actual, 0), 0));
+      const shiftPlan = [0, 1, 2].map((s) => subset.reduce((a, ln) => a + ln.hourly.filter((h) => h.shift === s).reduce((x, h) => x + h.plan, 0), 0));
+      barChart(document.getElementById("shiftChart"), {
+        labels: shiftLabels,
+        datasets: [
+          { label: "Plan", data: shiftPlan, color: "#64748b" },
+          { label: "Actual", data: shiftActual, color: color(0) },
+        ],
+        yTitle: "Units",
+      });
+
+      const dayLabels = Array.from({ length: 30 }, (_, i) => (i + 1));
+      const dailyActual = dayLabels.map((_, d) => subset.reduce((a, ln) => a + ln.daily[d].actual, 0));
+      const dailyPlan = dayLabels.map((_, d) => subset.reduce((a, ln) => a + ln.daily[d].plan, 0));
+      lineChart(document.getElementById("dailyChart"), {
+        labels: dayLabels,
+        datasets: [
+          { label: "Actual", data: dailyActual, color: color(0) },
+          { label: "Plan", data: dailyPlan, color: "#fbbf24" },
+        ],
+        yTitle: "Units / day",
+      });
+    }
+
+    function worstLine(subset) {
+      let w = null; let wv = Infinity;
+      for (const ln of subset) {
+        const plan = ln.daily.reduce((a, d) => a + d.plan, 0);
+        const actual = ln.daily.reduce((a, d) => a + d.actual, 0);
+        const ach = (actual / plan) * 100;
+        if (ach < wv) { wv = ach; w = ln.name; }
+      }
+      return w || "—";
+    }
+    function worstAch() {
+      let wv = Infinity;
+      for (const ln of data.perLine) {
+        const plan = ln.daily.reduce((a, d) => a + d.plan, 0);
+        const actual = ln.daily.reduce((a, d) => a + d.actual, 0);
+        wv = Math.min(wv, (actual / plan) * 100);
+      }
+      return wv;
+    }
+
+    function exportCSV() {
+      const cols = ["Line", "SKU", "Plan (units)", "Actual (units)", "Variance", "Achievement %"];
+      const rows = data.perLine.map((ln) => {
+        const plan = ln.daily.reduce((a, d) => a + d.plan, 0);
+        const actual = ln.daily.reduce((a, d) => a + d.actual, 0);
+        return { "Line": ln.name, "SKU": ln.sku.id, "Plan (units)": plan, "Actual (units)": actual, "Variance": actual - plan, "Achievement %": ((actual / plan) * 100).toFixed(1) };
+      });
+      downloadCSV("production-plan", cols, rows);
+    }
+
+    function setupToolbar() {
+      toolbar.append(toolbarButtons({
+        onRegenerate: () => { data = buildData(Math.floor(Math.random() * 1e9)); render(); },
+        onExport: exportCSV,
+      }));
+    }
+
+    setupToolbar();
+    render();
+  </script>
+</body>
+</html>

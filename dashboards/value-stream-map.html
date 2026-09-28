@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Interactive Value Stream Map — Manufacturing Analytics</title>
+  <meta name="description" content="Map process steps with cycle time, changeover, uptime and WIP to compute lead time, value-added time and process cycle efficiency (PCE)." />
+  <meta name="theme-color" content="#05060d" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/design-system.css" />
+  <style>
+    .vsm-flow { display:flex; align-items:center; overflow-x:auto; padding:18px 6px; gap:0; }
+    .vsm-step { flex:0 0 auto; }
+    .vsm-box { width:150px; border:1px solid var(--border); border-radius:12px; background:var(--bg-2); padding:12px; text-align:center; }
+    .vsm-box .pname { font-weight:700; font-size:14px; }
+    .vsm-box .pct { font-size:11px; color:var(--muted); margin-top:2px; }
+    .vsm-box .plbl { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin-top:10px; }
+    .vsm-box .pval { font-size:15px; font-weight:700; font-family:"Sora",sans-serif; }
+    .vsm-metrics { margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:4px; font-size:11px; color:var(--muted); }
+    .vsm-metrics b { color:var(--text); }
+    .wip-node { flex:0 0 auto; width:70px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+    .wip-tri { width:0; height:0; border-top:16px solid transparent; border-bottom:16px solid transparent; border-left:26px solid var(--accent,#6366f1); filter:drop-shadow(0 0 6px rgba(99,102,241,.35)); }
+    .wip-count { font-size:11px; font-weight:700; margin-top:4px; color:var(--warn,#fbbf24); }
+    .wip-lbl { font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
+    .va-bar { height:34px; border-radius:8px; overflow:hidden; display:flex; }
+    .va-seg { height:100%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:#0a0f1f; }
+    .legend-row { display:flex; gap:18px; align-items:center; font-size:12px; color:var(--muted); flex-wrap:wrap; }
+    .legend-dot { display:inline-block; width:11px; height:11px; border-radius:3px; margin-right:6px; vertical-align:middle; }
+    .state-toggle { display:flex; gap:8px; }
+    .state-toggle .btn.active { background:var(--accent,#6366f1); color:#fff; border-color:transparent; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <script type="module">
+    import { renderShell, el, kpiCards, insights, calcSection, card, fmt, pctStr, rag, toolbarButtons, downloadCSV } from "./shared/bundle.js";
+
+    const shell = renderShell({
+      category: "Lean / Industrial Engineering",
+      kicker: "Lean / Industrial Engineering",
+      title: "Interactive Value Stream Map",
+      description: "Map process steps with cycle time, changeover, uptime and WIP to compute lead time, value-added time and process cycle efficiency (PCE).",
+    });
+    const { main, toolbar } = shell;
+
+    const PROCESS_NAMES = ["Stamping", "Welding", "Assembly", "Painting", "Testing", "Packing"];
+    const TAKT_SEC = 60;
+
+    let mode = "current";
+    let data = buildData(42);
+
+    function buildData(seed) {
+      const rng = makeRng(seed);
+      const processes = PROCESS_NAMES.map((name, i) => {
+        const baseCT = [12, 18, 30, 22, 15, 10][i];
+        return {
+          name,
+          current: {
+            ct: Math.round(baseCT * rng.float(0.9, 1.15)),
+            co: rng.int(15, 45),
+            uptime: Math.round(rng.norm(82, 5)),
+            ops: rng.int(1, 4),
+          },
+          future: {
+            ct: Math.round(baseCT * rng.float(0.6, 0.78)),
+            co: rng.int(5, 15),
+            uptime: Math.round(Math.min(99, 88 + rng.norm(6, 3))),
+            ops: Math.max(1, rng.int(1, 2)),
+          },
+        };
+      });
+      const wip = [];
+      for (let i = 0; i < PROCESS_NAMES.length - 1; i++) {
+        wip.push({
+          current: rng.int(120, 900),
+          future: Math.round(rng.int(120, 900) * rng.float(0.15, 0.35)),
+        });
+      }
+      return { processes, wip };
+    }
+
+    function compute() {
+      const s = mode;
+      let vaSec = 0;
+      for (const p of data.processes) vaSec += p[s].ct;
+      const vaMin = vaSec / 60;
+      let waitMin = 0;
+      for (let i = 0; i < data.wip.length; i++) {
+        const downstreamCT = data.processes[i + 1][s].ct;
+        waitMin += (data.wip[i][s] * downstreamCT) / 60;
+      }
+      const totalMin = vaMin + waitMin;
+      const pce = totalMin > 0 ? (vaMin / totalMin) * 100 : 0;
+      const totalWip = data.wip.reduce((a, w) => a + w[s], 0);
+      const coTotal = data.processes.reduce((a, p) => a + p[s].co, 0);
+      const avgUptime = data.processes.reduce((a, p) => a + p[s].uptime, 0) / data.processes.length;
+      return { vaMin, vaSec, waitMin, totalMin, pce, totalWip, coTotal, avgUptime };
+    }
+
+    function render() {
+      const c = compute();
+      const s = mode;
+
+      main.innerHTML = "";
+
+      main.append(
+        el("div", { class: "state-toggle", style: "margin-bottom:14px" },
+          el("button", { class: "btn" + (mode === "current" ? " active" : ""), type: "button", onclick: () => { mode = "current"; render(); } }, "Current state"),
+          el("button", { class: "btn" + (mode === "future" ? " active" : ""), type: "button", onclick: () => { mode = "future"; render(); } }, "Future state")
+        )
+      );
+
+      main.append(
+        kpiCards([
+          { label: "Total lead time", value: c.totalMin.toFixed(1) + " min", sub: fmt(c.totalMin * 60) + " sec", status: rag("leadTime", c.totalMin / 1440) },
+          { label: "Value-added time", value: c.vaMin.toFixed(1) + " min", sub: fmt(c.vaSec) + " sec of processing", status: "good" },
+          { label: "Process cycle efficiency", value: pctStr(c.pce, 1), sub: "value-added ÷ total", status: rag("pce", c.pce) },
+          { label: "Total WIP", value: fmt(c.totalWip), sub: "units in process", status: c.totalWip > 2500 ? "bad" : c.totalWip > 1500 ? "warn" : "good" },
+        ])
+      );
+
+      main.append(card((mode === "current" ? "Current" : "Future") + " state value stream", "", renderVSM()));
+
+      main.append(
+        el("div", { class: "grid cols-2" },
+          card("Value-added vs non-value-added timeline", "", renderLadder(c)),
+          card("State summary", "", renderSummary(c))
+        )
+      );
+
+      main.append(el("h3", { style: "margin:18px 0 10px" }, "Process steps — " + mode + " state"));
+      main.append(renderTable());
+
+      main.append(insights([
+        mode === "current"
+          ? "Current <b>PCE is " + pctStr(c.pce, 1) + "</b> — " + (c.pce < 10 ? "very low, dominated by WIP waiting time." : "moderate, but WIP still inflates lead time.") + " Total lead time is <b>" + c.totalMin.toFixed(0) + " min</b> vs only " + c.vaMin.toFixed(1) + " min of value-add."
+          : "Future state lifts <b>PCE to " + pctStr(c.pce, 1) + "</b> by cutting WIP and cycle times — a " + improvementPct() + " lead-time reduction.",
+        "Largest WIP queue sits before <b>" + biggestWipStep() + "</b> at " + fmt(biggestWip()) + " units — the primary driver of waiting time.",
+        "Average uptime is <b>" + pctStr(c.avgUptime, 0) + "</b>; changeover totals <b>" + fmt(c.coTotal) + " min</b> per full pass across all steps.",
+      ]));
+
+      main.append(calcSection("How it's calculated", [
+        "Total lead time = processing time + waiting time (WIP × downstream cycle time)",
+        "Value-added time = Σ(cycle time of all process steps)",
+        "Process cycle efficiency (PCE) = value-added time ÷ total lead time × 100",
+        "Waiting time per segment = WIP units × downstream process cycle time",
+      ], [
+        "Takt time is fixed at " + TAKT_SEC + " sec/unit for this demonstration.",
+        "Future state assumes kaizen improvements: faster cycle times, shorter changeover, higher uptime and leaner WIP buffers.",
+      ]));
+    }
+
+    function improvementPct() {
+      const cur = computeFor("current");
+      const fut = computeFor("future");
+      return ((cur.totalMin - fut.totalMin) / cur.totalMin * 100).toFixed(0);
+    }
+    function computeFor(m) {
+      const prev = mode; mode = m; const r = compute(); mode = prev; return r;
+    }
+    function biggestWip() { return Math.max(...data.wip.map((w) => w[mode])); }
+    function biggestWipStep() {
+      const i = data.wip.findIndex((w) => w[mode] === biggestWip());
+      return data.processes[i + 1].name;
+    }
+
+    function renderVSM() {
+      const s = mode;
+      const flow = el("div", { class: "vsm-flow" });
+      data.processes.forEach((p, i) => {
+        flow.append(
+          el("div", { class: "vsm-step" },
+            el("div", { class: "vsm-box" },
+              el("div", { class: "pname" }, p.name),
+              el("div", { class: "pct" }, "CT " + p[s].ct + "s · CO " + p[s].co + "m"),
+              el("div", { class: "plbl" }, "Uptime"),
+              el("div", { class: "pval" }, pctStr(p[s].uptime, 0)),
+              el("div", { class: "plbl" }, "Operators"),
+              el("div", { class: "pval" }, p[s].ops)
+            ),
+            el("div", { class: "vsm-metrics" },
+              el("span", {}, "CT"), el("span", {}, "CO"),
+              el("b", {}, p[s].ct + "s"), el("b", {}, p[s].co + "m")
+            )
+          )
+        );
+        if (i < data.wip.length) {
+          flow.append(
+            el("div", { class: "wip-node" },
+              el("div", { class: "wip-tri" }),
+              el("div", { class: "wip-count" }, fmt(data.wip[i][s])),
+              el("div", { class: "wip-lbl" }, "WIP")
+            )
+          );
+        }
+      });
+      return flow;
+    }
+
+    function renderLadder(c) {
+      const vaPct = c.totalMin > 0 ? (c.vaMin / c.totalMin) * 100 : 0;
+      const nvaPct = 100 - vaPct;
+      return el("div", {},
+        el("div", { class: "va-bar" },
+          el("div", { class: "va-seg", style: "background:#34d399;width:" + vaPct.toFixed(2) + "%" }, vaPct >= 6 ? "VA " + pctStr(vaPct, 0) : ""),
+          el("div", { class: "va-seg", style: "background:#fbbf24;width:" + nvaPct.toFixed(2) + "%" }, nvaPct >= 6 ? "NVA " + pctStr(nvaPct, 0) : "")
+        ),
+        el("div", { class: "legend-row", style: "margin-top:10px" },
+          el("span", {}, el("span", { class: "legend-dot", style: "background:#34d399" }), "Value-added " + c.vaMin.toFixed(1) + " min"),
+          el("span", {}, el("span", { class: "legend-dot", style: "background:#fbbf24" }), "Non-value-added (waiting) " + c.waitMin.toFixed(1) + " min")
+        )
+      );
+    }
+
+    function renderSummary(c) {
+      const cur = computeFor("current");
+      const fut = computeFor("future");
+      const ltReduction = ((cur.totalMin - fut.totalMin) / cur.totalMin) * 100;
+      const pceGain = fut.pce - cur.pce;
+      return el("div", { class: "kpis" },
+        el("div", { class: "kpi" }, el("div", { class: "lab" }, "Lead time reduction"), el("div", { class: "val" }, pctStr(ltReduction, 0)), el("div", { class: "sub" }, cur.totalMin.toFixed(0) + " → " + fut.totalMin.toFixed(0) + " min")),
+        el("div", { class: "kpi", "data-status": "good" }, el("div", { class: "lab" }, "PCE improvement"), el("div", { class: "val" }, "+" + pceGain.toFixed(1) + " pp"), el("div", { class: "sub" }, pctStr(cur.pce, 1) + " → " + pctStr(fut.pce, 1))),
+        el("div", { class: "kpi", "data-status": "good" }, el("div", { class: "lab" }, "WIP reduction"), el("div", { class: "val" }, pctStr((1 - fut.totalWip / cur.totalWip) * 100, 0)), el("div", { class: "sub" }, fmt(cur.totalWip) + " → " + fmt(fut.totalWip) + " units"))
+      );
+    }
+
+    function renderTable() {
+      const cols = [
+        { label: "Process", key: "name" },
+        { label: "CT (sec)", key: "ct", align: "right", render: (r) => fmt(r.ct) },
+        { label: "Changeover (min)", key: "co", align: "right", render: (r) => fmt(r.co) },
+        { label: "Uptime %", key: "uptime", align: "right", render: (r) => pctStr(r.uptime, 0) },
+        { label: "Operators", key: "ops", align: "right" },
+      ];
+      const rows = data.processes.map((p) => p[mode]);
+      return el("div", {},
+        dataTable(cols, rows)
+      );
+    }
+
+    function exportCSV() {
+      const cols = ["Process", "CT (sec)", "Changeover (min)", "Uptime %", "Operators"];
+      const rows = data.processes.map((p) => ({ "Process": p.name, "CT (sec)": p[mode].ct, "Changeover (min)": p[mode].co, "Uptime %": p[mode].uptime, "Operators": p[mode].ops }));
+      downloadCSV("value-stream-map", cols, rows);
+    }
+
+    function setupToolbar() {
+      toolbar.append(toolbarButtons({
+        onRegenerate: () => { data = buildData(Math.floor(Math.random() * 1e9)); render(); },
+        onExport: exportCSV,
+      }));
+    }
+
+    setupToolbar();
+    render();
+  </script>
+</body>
+</html>

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Capacity Planning — Manufacturing Analytics</title>
+  <meta name="description" content="Compare required vs available capacity per line, visualize utilization, and run what-if scenarios (demand, overtime, manpower)." />
+  <meta name="theme-color" content="#05060d" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/design-system.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <script type="module">
+    import { renderShell, el, kpiCards, insights, calcSection, card, fmt, pctStr, make, color, colorAlpha, rag, pill, heatmap, toolbarButtons, dataTable, downloadCSV, makeRng } from "./shared/bundle.js";
+    import { LINES, SKUS } from "./data/constants.js";
+
+    const shell = renderShell({
+      category: "Lean / Industrial Engineering",
+      kicker: "Lean / Industrial Engineering",
+      title: "Capacity Planning",
+      description: "Compare required vs available capacity per line, visualize utilization, and run what-if scenarios (demand, overtime, manpower).",
+    });
+    const { main, toolbar } = shell;
+
+    let seed = 20240601;
+    let base = null;
+    const ctrl = { demandPct: 0, overtime: 0, addManpower: 0 };
+    const inputEls = {};
+    const charts = [];
+    const WEEKS = ["W1", "W2", "W3", "W4", "W5"];
+
+    function generate() {
+      const rng = makeRng(seed);
+      return LINES.map((name) => {
+        const used = new Set();
+        const skuCount = rng.int(2, 3);
+        const skus = [];
+        for (let k = 0; k < skuCount; k++) {
+          let s = rng.pick(SKUS);
+          let guard = 0;
+          while (used.has(s.id) && guard++ < 20) s = rng.pick(SKUS);
+          used.add(s.id);
+          skus.push({ id: s.id, name: s.name, smv: s.smv, demand: rng.int(1500, 12000) });
+        }
+        return {
+          name,
+          skus,
+          manpower: rng.int(18, 40),
+          hours: 8,
+          efficiency: rng.float(0.78, 0.93),
+          workingDays: 26,
+        };
+      });
+    }
+
+    function compute() {
+      const rows = base.map((l) => {
+        const demand = l.skus.map((s) => s.demand * (1 + ctrl.demandPct / 100));
+        const required = l.skus.reduce((a, s, i) => a + demand[i] * s.smv, 0);
+        const manpower = l.manpower + ctrl.addManpower;
+        const hours = l.hours + ctrl.overtime;
+        const available = manpower * hours * 60 * l.efficiency * l.workingDays;
+        const util = (required / available) * 100;
+        const daysNeeded = required / (manpower * hours * 60 * l.efficiency);
+        return { ...l, required, available, util, daysNeeded, manpower, hours, demandUnits: demand.reduce((a, b) => a + b, 0) };
+      });
+      const totalRequired = rows.reduce((a, r) => a + r.required, 0);
+      const totalAvailable = rows.reduce((a, r) => a + r.available, 0);
+      const avgUtil = (totalRequired / totalAvailable) * 100;
+      const overloaded = rows.filter((r) => r.util > 100).length;
+      return { rows, totalRequired, totalAvailable, avgUtil, overloaded, gap: totalAvailable - totalRequired };
+    }
+
+    function utilColor(v) {
+      if (v >= 88) return "rgba(52,211,153,0.8)";
+      if (v >= 75) return "rgba(251,191,36,0.85)";
+      return "rgba(248,113,113,0.85)";
+    }
+
+    function newChart() {
+      const canvas = el("canvas");
+      const box = el("div", { class: "chart-box" }, canvas);
+      return { box, canvas };
+    }
+    function add(c) { charts.push(c); return c; }
+
+    function render() {
+      charts.forEach((c) => c.destroy());
+      charts.length = 0;
+      const c = compute();
+
+      main.innerHTML = "";
+      main.append(
+        kpiCards([
+          { label: "Required minutes", value: fmt(c.totalRequired), sub: "Σ demand × SMV, monthly", status: "good" },
+          { label: "Available minutes", value: fmt(c.totalAvailable), sub: "manpower × hrs × eff", status: "good" },
+          { label: "Avg utilization", value: pctStr(c.avgUtil), sub: "required ÷ available", status: rag("utilization", c.avgUtil) },
+          { label: "Overloaded lines", value: c.overloaded, sub: "utilization > 100%", status: c.overloaded ? "bad" : "good" },
+          { label: "Capacity gap", value: fmt(c.gap) + " min", sub: (c.gap >= 0 ? "surplus available" : "shortfall"), status: c.gap >= 0 ? "good" : "bad" },
+        ]),
+        el("div", { class: "grid cols-2" },
+          card("Capacity vs demand by line", "", (() => {
+            const { box, canvas } = newChart();
+            add(make(canvas, {
+              type: "bar",
+              data: {
+                labels: c.rows.map((r) => r.name),
+                datasets: [
+                  { label: "Available (min)", data: c.rows.map((r) => r.available), backgroundColor: color(3), borderRadius: 4 },
+                  { label: "Required (min)", data: c.rows.map((r) => r.required), backgroundColor: c.rows.map((r) => (r.util > 100 ? "#f87171" : color(0))), borderRadius: 4 },
+                ],
+              },
+              options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: "bottom" } },
+                scales: {
+                  x: { stacked: true },
+                  y: { stacked: true, beginAtZero: true, title: { display: true, text: "Minutes / month" } },
+                },
+              },
+            }));
+            return box;
+          })()),
+          card("Utilization heatmap — line × week", "", (() => {
+            const rng = makeRng(seed + 7);
+            const values = c.rows.map((r) => WEEKS.map(() => {
+              const base = r.util;
+              return Math.max(0, Math.min(140, rng.norm(base, 8)));
+            }));
+            return heatmap({
+              rowLabels: c.rows.map((r) => r.name),
+              colLabels: WEEKS,
+              values,
+              colorFor: utilColor,
+              fmt: (v) => pctStr(v, 0),
+            });
+          })())
+        ),
+        el("h3", { style: "margin:18px 0 10px" }, "Line-level capacity detail"),
+        dataTable(
+          [
+            "Line",
+            { label: "Demand (units)", key: "demandUnits", align: "right", render: (r) => fmt(r.demandUnits) },
+            { label: "Required (min)", key: "required", align: "right", render: (r) => fmt(r.required) },
+            { label: "Available (min)", key: "available", align: "right", render: (r) => fmt(r.available) },
+            { label: "Utilization", key: "util", align: "right", render: (r) => pctStr(r.util) },
+            { label: "Status", key: "util", render: (r) => pill(r.util > 100 ? "bad" : r.util < 75 ? "warn" : "good", r.util > 100 ? "Overload" : r.util < 75 ? "Underload" : "Balanced") },
+            { label: "Days needed", key: "daysNeeded", align: "right", render: (r) => fmt(r.daysNeeded, 1) },
+          ],
+          c.rows
+        ),
+        insights([
+          "Average utilization is <b>" + pctStr(c.avgUtil) + "</b> — " + (c.avgUtil >= 88 ? "capacity is comfortably absorbed." : c.avgUtil >= 75 ? "near the target band, monitor closely." : "<b>under-loaded</b>; there is idle capacity to absorb more demand."),
+          "<b>" + c.overloaded + "</b> line" + (c.overloaded === 1 ? " is" : "s are") + " overloaded — add manpower or overtime on those lines, or level-load demand across the week.",
+          "Overall capacity gap is <b>" + fmt(c.gap) + " min</b> (" + (c.gap >= 0 ? "surplus" : "shortfall") + "). Adjust the what-if sliders to re-balance.",
+        ]),
+        calcSection("How it's calculated", [
+          "Required minutes = Σ (SKU demand × SMV)  per line, summed over SKUs",
+          "Available minutes = manpower × working hours × 60 × efficiency × working days",
+          "Utilization % = required minutes ÷ available minutes × 100",
+          "Days needed = required minutes ÷ (manpower × working hours × 60 × efficiency)",
+        ], [
+          "SMV = Standard Minute Value — standard time for one unit.",
+          "What-if sliders multiply demand and add overtime / manpower; all figures recompute live.",
+          "Working days per month assumed 26; hours base 8/day.",
+        ])
+      );
+    }
+
+    function setupToolbar() {
+      toolbar.append(
+        toolbarButtons({
+          onRegenerate: () => {
+            seed = Math.floor(Math.random() * 1e8);
+            base = generate();
+            ctrl.demandPct = 0; ctrl.overtime = 0; ctrl.addManpower = 0;
+            inputEls.demand.value = 0; inputEls.demand.val.textContent = "0%";
+            inputEls.overtime.value = 0; inputEls.overtime.val.textContent = "0 hr";
+            inputEls.manpower.value = 0; inputEls.manpower.val.textContent = "0";
+            render();
+          },
+          onExport: () => {
+            const c = compute();
+            downloadCSV("capacity-planning", [
+              "Line", "Demand (units)", "Required (min)", "Available (min)", "Utilization %", "Days needed", "Manpower", "Hours/day", "Efficiency %",
+            ], c.rows.map((r) => ({
+              "Line": r.name, "Demand (units)": r.demandUnits, "Required (min)": Math.round(r.required), "Available (min)": Math.round(r.available), "Utilization %": r.util.toFixed(1), "Days needed": r.daysNeeded.toFixed(1), "Manpower": r.manpower, "Hours/day": r.hours, "Efficiency %": (r.efficiency * 100).toFixed(1),
+            })));
+          },
+        })
+      );
+
+      const mk = (key, label, min, max, step, suffix, fmtVal) => {
+        const input = el("input", { type: "range", min, max, step, value: 0 });
+        const val = el("span", { class: "range-val" }, fmtVal(0));
+        input.addEventListener("input", () => {
+          const v = Number(input.value);
+          ctrl[key] = v;
+          val.textContent = fmtVal(v);
+          render();
+        });
+        inputEls[key] = { input, val };
+        return el("div", { class: "field" }, el("label", {}, label), el("div", { style: "display:flex;align-items:center;gap:10px" }, input, val));
+      };
+
+      toolbar.append(
+        el("div", { class: "filterbar", style: "flex:1 1 100%" },
+          mk("demandPct", "Demand ± %", -30, 50, 5, "%", (v) => (v >= 0 ? "+" : "") + v + "%"),
+          mk("overtime", "Overtime hrs/day", 0, 4, 1, " hr", (v) => v + " hr"),
+          mk("addManpower", "Added manpower", 0, 15, 1, "", (v) => "+" + v)
+        )
+      );
+    }
+
+    base = generate();
+    setupToolbar();
+    render();
+  </script>
+</body>
+</html>

@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maintenance — Manufacturing Analytics</title>
+  <meta name="description" content="PM schedule vs completion, breakdown log, machine health score, cost trend and overdue PMs." />
+  <meta name="theme-color" content="#05060d" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/design-system.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <script type="module">
+    import { renderShell, el, kpiCards, insights, calcSection, card, fmt, pctStr, color, rag, pill, ragDot, toolbarButtons, dataTable, downloadCSV, makeRng, addDays, fmtDate, heatmap, barChart, lineChart } from "./shared/bundle.js";
+    import { MACHINES, DOWNTIME_REASONS, MONTHS } from "./data/constants.js";
+
+    const shell = renderShell({
+      category: "Factory Departments",
+      kicker: "Factory Departments",
+      title: "Maintenance",
+      description: "PM schedule vs completion, breakdown log, machine health score, cost trend and overdue PMs.",
+    });
+    const { main, toolbar } = shell;
+
+    let seed = 20241101;
+    let breakdowns = [];
+    let machines = [];
+    const charts = [];
+    const MONTH_COUNT = 12;
+    const HOURS_PER_MONTH = 720;
+
+    function generate() {
+      const rng = makeRng(seed);
+
+      // per-machine PM schedule (planned vs completed) + baseline
+      machines = MACHINES.map((name, i) => {
+        const pmCompliance = rng.float(0.55, 1.0);
+        const schedule = [];
+        for (let m = 0; m < MONTH_COUNT; m++) {
+          const planned = rng.int(2, 5);
+          const completed = Math.max(0, Math.min(planned, Math.round(planned * (pmCompliance + rng.float(-0.15, 0.15)))));
+          schedule.push({ month: m, planned, completed });
+        }
+        return {
+          name,
+          idx: i,
+          pmCompliance,
+          schedule,
+          spareCost: Math.round(rng.float(20000, 120000)),
+        };
+      });
+
+      // breakdown log
+      breakdowns = [];
+      const n = rng.int(90, 140);
+      for (let i = 0; i < n; i++) {
+        const month = rng.int(0, MONTH_COUNT - 1);
+        const date = new Date(2024, month, rng.int(1, 28));
+        const machine = rng.pick(MACHINES);
+        const reason = rng.pick(DOWNTIME_REASONS);
+        const downtimeMin = Math.round(rng.float(15, 480));
+        const cost = Math.round(downtimeMin * rng.float(40, 180));
+        breakdowns.push({ date, month, machine, reason, downtimeMin, cost });
+      }
+    }
+
+    function machineStats(m) {
+      const rows = breakdowns.filter((b) => b.machine === m.name);
+      const failures = rows.length;
+      const downtimeMin = rows.reduce((a, b) => a + b.downtimeMin, 0);
+      const downtimeH = downtimeMin / 60;
+      const uptimeH = Math.max(MONTH_COUNT * HOURS_PER_MONTH - downtimeH, 1);
+      const mtbf = failures ? uptimeH / failures : uptimeH;
+      const mttr = failures ? downtimeMin / failures : 0;
+      const breakdownCost = rows.reduce((a, b) => a + b.cost, 0);
+      const cost = breakdownCost + m.spareCost;
+
+      const totalPlanned = m.schedule.reduce((a, s) => a + s.planned, 0);
+      const totalCompleted = m.schedule.reduce((a, s) => a + s.completed, 0);
+      const compliance = totalPlanned ? (totalCompleted / totalPlanned) * 100 : 100;
+
+      // health score = weighted composite (documented)
+      const availPct = (uptimeH / (MONTH_COUNT * HOURS_PER_MONTH)) * 100;
+      const failureScore = Math.max(0, 100 - failures * 6);
+      const health = Math.round(compliance * 0.4 + availPct * 0.4 + failureScore * 0.2);
+
+      return { failures, downtimeMin, mtbf, mttr, cost, compliance, health, totalPlanned, totalCompleted };
+    }
+
+    function compute() {
+      const stats = machines.map((m) => ({ ...m, ...machineStats(m) }));
+
+      const totalPlanned = stats.reduce((a, m) => a + m.totalPlanned, 0);
+      const totalCompleted = stats.reduce((a, m) => a + m.totalCompleted, 0);
+      const pmCompliance = totalPlanned ? (totalCompleted / totalPlanned) * 100 : 100;
+
+      const totalBreakdowns = breakdowns.length;
+      const totalDowntimeMin = breakdowns.reduce((a, b) => a + b.downtimeMin, 0);
+      const totalDowntimeH = totalDowntimeMin / 60;
+      const totalUptimeH = Math.max(stats.length * MONTH_COUNT * HOURS_PER_MONTH - totalDowntimeH, 1);
+      const mtbf = totalBreakdowns ? totalUptimeH / totalBreakdowns : totalUptimeH;
+      const mttr = totalBreakdowns ? totalDowntimeMin / totalBreakdowns : 0;
+      const totalCost = stats.reduce((a, m) => a + m.cost, 0);
+
+      // breakdowns by machine
+      const byMachine = MACHINES.map((name) => ({ name, count: breakdowns.filter((b) => b.machine === name).length }));
+
+      // monthly cost trend
+      const monthlyCost = [];
+      for (let mo = 0; mo < MONTH_COUNT; mo++) {
+        const bd = breakdowns.filter((b) => b.month === mo).reduce((a, b) => a + b.cost, 0);
+        const spare = machines.reduce((a, m) => a + m.spareCost, 0) / MONTH_COUNT;
+        monthlyCost.push(Math.round(bd + spare));
+      }
+
+      // PM compliance heatmap (machine × month)
+      const heatVals = machines.map((m) => m.schedule.map((s) => s.planned ? +( (s.completed / s.planned) * 100 ).toFixed(0) : 100));
+
+      // overdue PMs
+      const overdue = machines.map((m) => {
+        const late = m.schedule.filter((s) => s.completed < s.planned).length;
+        return { name: m.name, overdue: late, missed: m.schedule.reduce((a, s) => a + Math.max(0, s.planned - s.completed), 0) };
+      }).filter((o) => o.overdue > 0).sort((a, b) => b.missed - a.missed);
+
+      return { stats, pmCompliance, totalBreakdowns, mtbf, mttr, totalCost, byMachine, monthlyCost, heatVals, overdue };
+    }
+
+    function add(c) { charts.push(c); return c; }
+
+    function healthColor(h) {
+      return h >= 80 ? "#34d399" : h >= 60 ? "#fbbf24" : "#f87171";
+    }
+
+    function render() {
+      charts.forEach((c) => c.destroy());
+      charts.length = 0;
+      const c = compute();
+
+      main.innerHTML = "";
+      main.append(
+        kpiCards([
+          { label: "PM compliance", value: pctStr(c.pmCompliance, 1), sub: "completed ÷ planned", status: rag("pmCompliance", c.pmCompliance) },
+          { label: "Total breakdowns", value: c.totalBreakdowns, sub: "over 12 months", status: c.totalBreakdowns > 120 ? "bad" : c.totalBreakdowns > 90 ? "warn" : "good" },
+          { label: "MTBF", value: fmt(c.mtbf, 0) + " hr", sub: "mean time between failures", status: rag("mtbf", c.mtbf) },
+          { label: "MTTR", value: fmt(c.mttr, 0) + " min", sub: "mean time to repair", status: rag("mttr", c.mttr / 60) },
+          { label: "Maintenance cost", value: "৳" + fmt(c.totalCost, 0), sub: "breakdown + spares", status: "good" },
+        ]),
+        el("div", { class: "grid cols-2" },
+          card("Breakdowns by machine", "", el("div", { class: "chart-box tall" }, el("canvas", { id: "breakdownCanvas" }))),
+          card("Maintenance cost trend (monthly)", "", el("div", { class: "chart-box tall" }, el("canvas", { id: "costCanvas" })))
+        ),
+        el("div", { class: "grid cols-2" },
+          card("Machine health score (0–100)", "", el("div", { class: "chart-box tall" }, el("canvas", { id: "healthCanvas" }))),
+          card("PM compliance heatmap (machine × month)", "", (() => {
+            return heatmap({
+              rowLabels: MACHINES.map((m) => m.split(" ")[0]),
+              colLabels: MONTHS,
+              values: c.heatVals,
+              colorFor: (v) => (v >= 95 ? "#34d399" : v >= 85 ? "#fbbf24" : "#f87171"),
+              fmt: (v) => v + "%",
+            });
+          })())
+        ),
+        el("h3", { style: "margin:18px 0 10px" }, "Overdue PMs"),
+        (() => {
+          if (!c.overdue.length) return el("p", {}, "No overdue PMs.");
+          return dataTable(
+            [
+              "Machine",
+              { label: "Overdue PMs", key: "overdue", align: "right", render: (r) => fmt(r.overdue) },
+              { label: "Missed tasks", key: "missed", align: "right", render: (r) => fmt(r.missed) },
+              { label: "Status", key: "missed", render: (r) => pill(r.missed >= 4 ? "bad" : "warn", r.missed >= 4 ? "Critical" : "Attention") },
+            ],
+            c.overdue
+          );
+        })(),
+        el("h3", { style: "margin:18px 0 10px" }, "Machines"),
+        dataTable(
+          [
+            "Machine",
+            { label: "PM planned", key: "totalPlanned", align: "right", render: (r) => fmt(r.totalPlanned) },
+            { label: "PM completed", key: "totalCompleted", align: "right", render: (r) => fmt(r.totalCompleted) },
+            { label: "Compliance", key: "compliance", align: "right", render: (r) => pctStr(r.compliance, 0) },
+            { label: "Breakdowns", key: "failures", align: "right", render: (r) => fmt(r.failures) },
+            { label: "MTBF (hr)", key: "mtbf", align: "right", render: (r) => fmt(r.mtbf, 0) },
+            { label: "MTTR (min)", key: "mttr", align: "right", render: (r) => fmt(r.mttr, 0) },
+            { label: "Cost (৳)", key: "cost", align: "right", render: (r) => fmt(r.cost, 0) },
+            { label: "Health", key: "health", align: "right", render: (r) => el("span", { style: "display:flex;align-items:center;gap:6px;justify-content:flex-end" }, ragDot(r.health >= 80 ? "good" : r.health >= 60 ? "warn" : "bad"), fmt(r.health, 0)) },
+            { label: "Status", key: "health", render: (r) => pill(r.health >= 80 ? "good" : r.health >= 60 ? "warn" : "bad", r.health >= 80 ? "Healthy" : r.health >= 60 ? "Watch" : "Critical") },
+          ],
+          c.stats
+        ),
+        insights([
+          "PM compliance is <b>" + pctStr(c.pmCompliance, 1) + "</b> with <b>" + c.overdue.length + "</b> machine(s)</b> having overdue PMs — " + (c.pmCompliance >= 95 ? "excellent." : c.pmCompliance >= 85 ? "acceptable but improvable." : "<b>below target</b>; backlog is eroding reliability."),
+          "<b>" + (c.byMachine.slice().sort((a, b) => b.count - a.count)[0].name) + "</b> had the most breakdowns (" + fmt(c.byMachine.slice().sort((a, b) => b.count - a.count)[0].count) + ") — prioritize its PM schedule and root-cause analysis.",
+          "Fleet MTBF is <b>" + fmt(c.mtbf, 0) + " hr</b> and MTTR <b>" + fmt(c.mttr, 0) + " min</b>; total maintenance cost ৳" + fmt(c.totalCost, 0) + " over the year.",
+        ]),
+        calcSection("How it's calculated", [
+          "PM compliance % = completed PMs ÷ planned PMs × 100",
+          "MTBF (hr) = total uptime (hr) ÷ number of failures",
+          "MTTR (min) = total repair time (min) ÷ number of failures",
+          "Health = 0.4 × PM compliance + 0.4 × availability + 0.2 × failure score",
+        ], [
+          "Availability = uptime ÷ scheduled time (720 hr/month × 12).",
+          "Failure score = max(0, 100 − failures × 6), capping the penalty per breakdown.",
+        ])
+      );
+
+      add(barChart(document.getElementById("breakdownCanvas"), { labels: c.byMachine.map((m) => m.name.split(" ")[0]), datasets: [{ label: "Breakdowns", data: c.byMachine.map((m) => m.count) }], yTitle: "Count" }));
+
+      add(lineChart(document.getElementById("costCanvas"), { labels: MONTHS, datasets: [{ label: "Maintenance cost (৳)", data: c.monthlyCost }], yTitle: "৳", fill: true }));
+
+      add(barChart(document.getElementById("healthCanvas"), {
+        labels: c.stats.map((m) => m.name.split(" ")[0]),
+        datasets: [{ label: "Health score", data: c.stats.map((m) => m.health), backgroundColor: c.stats.map((m) => healthColor(m.health)) }],
+        yTitle: "Score",
+        horizontal: true,
+      }));
+    }
+
+    function setupToolbar() {
+      toolbar.append(
+        toolbarButtons({
+          onRegenerate: () => { seed = Math.floor(Math.random() * 1e8); generate(); render(); },
+          onExport: () => {
+            downloadCSV("maintenance-breakdowns", ["Date", "Machine", "Reason", "Downtime (min)", "Cost (BDT)"],
+              breakdowns.map((b) => ({ "Date": fmtDate(b.date), "Machine": b.machine, "Reason": b.reason, "Downtime (min)": b.downtimeMin, "Cost (BDT)": b.cost })));
+          },
+        })
+      );
+    }
+
+    generate();
+    setupToolbar();
+    render();
+  </script>
+</body>
+</html>

@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Supplier Performance — Manufacturing Analytics</title>
+  <meta name="description" content="OTIF, lead time, reject rate and spend concentration with a supplier scorecard." />
+  <meta name="theme-color" content="#05060d" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/design-system.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <script type="module">
+    import { renderShell, el, kpiCards, insights, calcSection, card, fmt, pctStr, color, rag, pill, ragDot, toolbarButtons, dataTable, downloadCSV, makeRng, addDays, fmtDate, fmtDateShort, barChart, lineChart, doughnutChart } from "./shared/bundle.js";
+    import { SUPPLIERS } from "./data/constants.js";
+
+    const shell = renderShell({
+      category: "Factory Departments",
+      kicker: "Factory Departments",
+      title: "Supplier Performance",
+      description: "OTIF, lead time, reject rate and spend concentration with a supplier scorecard.",
+    });
+    const { main, toolbar } = shell;
+
+    let seed = 20240915;
+    let filter = { supplier: "All", from: "", to: "" };
+    let pos = [];
+    const charts = [];
+
+    function generate() {
+      const rng = makeRng(seed);
+      const out = [];
+      const anchor = new Date("2025-12-31");
+      for (let i = 0; i < 60; i++) {
+        const supplier = SUPPLIERS[i % SUPPLIERS.length];
+        const month = rng.int(0, 11);
+        const day = rng.int(1, 27);
+        const orderDate = addDays(anchor, -(11 - month) * 30 - (27 - day));
+        const promisedLead = rng.int(4, 10);
+        const actualLead = Math.max(2, promisedLead + rng.int(-2, 6));
+        const promisedDate = addDays(orderDate, promisedLead);
+        const actualDate = addDays(orderDate, actualLead);
+        const qtyOrdered = rng.int(500, 5000);
+        const qtyReceived = Math.max(0, qtyOrdered - rng.int(0, Math.round(qtyOrdered * 0.05)));
+        const rejectedQty = Math.round(qtyReceived * rng.float(0, 0.08));
+        const unitPrice = rng.float(8, 220);
+        const value = Math.round(qtyReceived * unitPrice);
+        out.push({ supplier, orderDate, promisedDate, actualDate, qtyOrdered, qtyReceived, rejectedQty, value, month, onTime: actualLead <= promisedLead });
+      }
+      return out;
+    }
+
+    function inRange(p) {
+      if (filter.from && fmtDate(p.orderDate) < filter.from) return false;
+      if (filter.to && fmtDate(p.orderDate) > filter.to) return false;
+      if (filter.supplier !== "All" && p.supplier !== filter.supplier) return false;
+      return true;
+    }
+
+    function compute() {
+      const filtered = pos.filter(inRange);
+      const bySupplier = SUPPLIERS.map((name) => {
+        const rows = filtered.filter((p) => p.supplier === name);
+        if (!rows.length) return null;
+        const poCount = rows.length;
+        const otif = (rows.filter((r) => r.onTime).length / poCount) * 100;
+        const avgLead = rows.reduce((a, r) => a + Math.round((r.actualDate - r.orderDate) / 86400000), 0) / poCount;
+        const received = rows.reduce((a, r) => a + r.qtyReceived, 0);
+        const rejected = rows.reduce((a, r) => a + r.rejectedQty, 0);
+        const rejectPct = received ? (rejected / received) * 100 : 0;
+        const spend = rows.reduce((a, r) => a + r.value, 0);
+        const otifScore = otif;
+        const qualityScore = 100 * (1 - rejectPct / 100);
+        const deliveryScore = Math.max(0, Math.min(100, 100 - (avgLead - 3) * 8));
+        const score = 0.4 * otifScore + 0.3 * qualityScore + 0.3 * deliveryScore;
+        return { name, poCount, otif, avgLead, rejectPct, spend, score, status: score >= 80 ? "good" : score >= 60 ? "warn" : "bad" };
+      }).filter(Boolean);
+
+      const totalPOs = filtered.length;
+      const otifPct = totalPOs ? (filtered.filter((r) => r.onTime).length / totalPOs) * 100 : 0;
+      const avgLead = totalPOs ? filtered.reduce((a, r) => a + Math.round((r.actualDate - r.orderDate) / 86400000), 0) / totalPOs : 0;
+      const totalReceived = filtered.reduce((a, r) => a + r.qtyReceived, 0);
+      const totalRejected = filtered.reduce((a, r) => a + r.rejectedQty, 0);
+      const rejectPct = totalReceived ? (totalRejected / totalReceived) * 100 : 0;
+      return { bySupplier, totalPOs, otifPct, avgLead, rejectPct, filtered };
+    }
+
+    function render() {
+      charts.forEach((c) => c.destroy());
+      charts.length = 0;
+      const c = compute();
+
+      main.innerHTML = "";
+      main.append(
+        kpiCards([
+          { label: "OTIF", value: pctStr(c.otifPct), sub: "on-time deliveries", status: rag("otif", c.otifPct) },
+          { label: "Avg lead time", value: fmt(c.avgLead, 1) + " d", sub: "order → receipt", status: rag("leadTime", c.avgLead) },
+          { label: "Supplier reject", value: pctStr(c.rejectPct, 2), sub: "rejected ÷ received", status: rag("rejection", c.rejectPct) },
+          { label: "Purchase orders", value: fmt(c.totalPOs), sub: "in selected window", status: "good" },
+        ]),
+        el("div", { class: "grid cols-2" },
+          card("Supplier scorecard ranking", "", el("div", { class: "chart-box" }, el("canvas", { id: "rankChart" }))),
+          card("Lead time trend by supplier", "", el("div", { class: "chart-box" }, el("canvas", { id: "leadChart" })))
+        ),
+        el("div", { class: "grid cols-2" },
+          card("Reject rate by supplier", "", el("div", { class: "chart-box" }, el("canvas", { id: "rejectChart" }))),
+          card("Spend concentration", "", el("div", { class: "chart-box" }, el("canvas", { id: "spendChart" })))
+        ),
+        el("h3", { style: "margin:18px 0 10px" }, "Supplier scorecard"),
+        dataTable(
+          [
+            "Supplier",
+            { label: "POs", key: "poCount", align: "right", render: (r) => fmt(r.poCount) },
+            { label: "OTIF %", key: "otif", align: "right", render: (r) => pctStr(r.otif) },
+            { label: "Avg lead (d)", key: "avgLead", align: "right", render: (r) => fmt(r.avgLead, 1) },
+            { label: "Reject %", key: "rejectPct", align: "right", render: (r) => pctStr(r.rejectPct, 2) },
+            { label: "Spend (BDT)", key: "spend", align: "right", render: (r) => "৳" + fmt(r.spend) },
+            { label: "Score", key: "score", align: "right", render: (r) => fmt(r.score, 1) },
+            { label: "Status", key: "status", render: (r) => pill(r.status, r.status === "good" ? "Good" : r.status === "warn" ? "Watch" : "Poor") },
+          ],
+          c.bySupplier
+        ),
+        insights([
+          "Plant OTIF is <b>" + pctStr(c.otifPct) + "</b> with an average lead time of <b>" + fmt(c.avgLead, 1) + " days</b>.",
+          (() => {
+            const worst = [...c.bySupplier].sort((a, b) => a.rejectPct - b.rejectPct)[c.bySupplier.length - 1];
+            return worst ? "<b>" + worst.name + "</b> has the highest reject rate at " + pctStr(worst.rejectPct, 2) + " — investigate incoming quality." : "";
+          })(),
+          (() => {
+            const total = c.bySupplier.reduce((a, r) => a + r.spend, 0);
+            const top = [...c.bySupplier].sort((a, b) => b.spend - a.spend)[0];
+            return top ? "<b>" + top.name + "</b> accounts for " + pctStr(total ? (top.spend / total) * 100 : 0) + " of spend — highest concentration risk." : "";
+          })(),
+        ]),
+        calcSection("How it's calculated", [
+          "OTIF % = on-time POs ÷ total POs × 100",
+          "Reject % = rejected qty ÷ received qty × 100",
+          "Avg lead time = Σ (actual − order date) ÷ number of POs",
+          "Composite score = 40% × OTIF + 30% × quality + 30% × delivery",
+        ], [
+          "Quality score = 100 × (1 − reject %).",
+          "Delivery score = clamp(100 − (avg lead − 3) × 8, 0, 100) — faster delivery scores higher.",
+          "Synthetic demo data — seeded for reproducibility.",
+        ])
+      );
+
+      renderCharts(c);
+    }
+
+    function renderCharts(c) {
+      const ranked = [...c.bySupplier].sort((a, b) => a.score - b.score);
+      const c1 = barChart(document.getElementById("rankChart"), {
+        labels: ranked.map((r) => r.name),
+        datasets: [{ label: "Composite score", data: ranked.map((r) => +r.score.toFixed(1)), color: color(0) }],
+        horizontal: true,
+        yTitle: "Score (0–100)",
+      });
+      charts.push(c1);
+
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const leadBySupplier = SUPPLIERS.map((s) => {
+        const rows = c.filtered.filter((p) => p.supplier === s);
+        return months.map((m, mi) => {
+          const mrows = rows.filter((r) => r.month === mi);
+          return mrows.length ? Math.round(mrows.reduce((a, r) => a + (r.actualDate - r.orderDate) / 86400000, 0) / mrows.length) : null;
+        });
+      });
+      const c2 = lineChart(document.getElementById("leadChart"), {
+        labels: months,
+        datasets: SUPPLIERS.map((s, i) => ({ label: s, data: leadBySupplier[i], color: color(i) })),
+        yTitle: "Lead time (days)",
+      });
+      charts.push(c2);
+
+      const c3 = barChart(document.getElementById("rejectChart"), {
+        labels: c.bySupplier.map((r) => r.name),
+        datasets: [{ label: "Reject %", data: c.bySupplier.map((r) => +r.rejectPct.toFixed(2)), backgroundColor: c.bySupplier.map((r) => (r.rejectPct <= 1 ? "#34d399" : r.rejectPct <= 3 ? "#fbbf24" : "#f87171")), borderRadius: 4 }],
+        yTitle: "Reject %",
+      });
+      charts.push(c3);
+
+      const c4 = doughnutChart(document.getElementById("spendChart"), {
+        labels: c.bySupplier.map((r) => r.name),
+        values: c.bySupplier.map((r) => r.spend),
+      });
+      charts.push(c4);
+    }
+
+    function setupToolbar() {
+      toolbar.append(
+        toolbarButtons({
+          onRegenerate: () => {
+            seed = Math.floor(Math.random() * 1e8);
+            pos = generate();
+            render();
+          },
+          onExport: () => {
+            const c = compute();
+            downloadCSV("supplier-performance", [
+              "Supplier", "POs", "OTIF %", "Avg lead (d)", "Reject %", "Spend (BDT)", "Score", "Status",
+            ], c.bySupplier.map((r) => ({
+              "Supplier": r.name, "POs": r.poCount, "OTIF %": r.otif.toFixed(1), "Avg lead (d)": r.avgLead.toFixed(1), "Reject %": r.rejectPct.toFixed(2), "Spend (BDT)": r.spend, "Score": r.score.toFixed(1), "Status": r.status,
+            })));
+          },
+        })
+      );
+
+      const supSelect = el("select", {},
+        el("option", { value: "All", selected: "" }, "All suppliers"),
+        ...SUPPLIERS.map((s) => el("option", { value: s }, s))
+      );
+      supSelect.addEventListener("change", () => { filter.supplier = supSelect.value; render(); });
+
+      const fromInput = el("input", { type: "date", value: "" });
+      fromInput.addEventListener("change", () => { filter.from = fromInput.value; render(); });
+      const toInput = el("input", { type: "date", value: "" });
+      toInput.addEventListener("change", () => { filter.to = toInput.value; render(); });
+
+      toolbar.append(
+        el("div", { class: "filterbar", style: "flex:1 1 100%" },
+          el("div", { class: "field" }, el("label", {}, "Supplier"), supSelect),
+          el("div", { class: "field" }, el("label", {}, "From"), fromInput),
+          el("div", { class: "field" }, el("label", {}, "To"), toInput)
+        )
+      );
+    }
+
+    pos = generate();
+    setupToolbar();
+    render();
+  </script>
+</body>
+</html>

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Downtime Pareto & Reliability — Manufacturing Analytics</title>
+  <meta name="description" content="Pareto of downtime causes with MTBF/MTTR/availability, trend, and click-to-filter on a cause." />
+  <meta name="theme-color" content="#05060d" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/design-system.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <script type="module">
+    import { renderShell, el, kpiCards, insights, calcSection, card, fmt, pctStr, color, rag, pill, toolbarButtons, dataTable, downloadCSV, makeRng, addDays, fmtDate, fmtDateShort, paretoChart, barChart, lineChart, doughnutChart } from "./shared/bundle.js";
+    import { LINES, MACHINES, DOWNTIME_REASONS } from "./data/constants.js";
+
+    const shell = renderShell({
+      category: "Lean / Industrial Engineering",
+      kicker: "Lean / Industrial Engineering",
+      title: "Downtime Pareto & Reliability",
+      description: "Pareto of downtime causes with MTBF/MTTR/availability, trend, and click-to-filter on a cause.",
+    });
+    const { main, toolbar } = shell;
+
+    let seed = 20240701;
+    let records = [];
+    let selectedReason = null;
+    const charts = [];
+    const WEEKS = 12;
+    const DAYS_PER_WEEK = 6;
+    const HOURS_PER_DAY = 16;
+
+    function generate() {
+      const rng = makeRng(seed);
+      const start = new Date(2024, 3, 1);
+      const n = rng.int(130, 190);
+      const out = [];
+      for (let i = 0; i < n; i++) {
+        const dayOffset = rng.int(0, WEEKS * DAYS_PER_WEEK - 1);
+        const date = addDays(start, dayOffset);
+        const reason = rng.pick(DOWNTIME_REASONS);
+        const minutes = Math.round(rng.float(8, 240));
+        out.push({
+          date,
+          line: rng.pick(LINES),
+          machine: rng.pick(MACHINES),
+          reason,
+          minutes,
+        });
+      }
+      out.sort((a, b) => b.date - a.date);
+      return out;
+    }
+
+    function totalAvailableMinutes() {
+      return LINES.length * WEEKS * DAYS_PER_WEEK * HOURS_PER_DAY * 60;
+    }
+
+    function compute() {
+      const filtered = selectedReason ? records.filter((r) => r.reason === selectedReason) : records;
+      const downtimeMin = filtered.reduce((a, r) => a + r.minutes, 0);
+      const failures = filtered.length;
+      const availMin = totalAvailableMinutes();
+      const uptimeMin = availMin - downtimeMin;
+      const mtbfH = failures ? uptimeMin / 60 / failures : 0;
+      const mttrMin = failures ? downtimeMin / failures : 0;
+      const mttrH = mttrMin / 60;
+      const avail = mtbfH + mttrH ? (mtbfH / (mtbfH + mttrH)) * 100 : 100;
+
+      const byLine = LINES.map((l) => ({ line: l, minutes: filtered.filter((r) => r.line === l).reduce((a, r) => a + r.minutes, 0) }));
+      const weekly = [];
+      const start = new Date(2024, 3, 1);
+      for (let w = 0; w < WEEKS; w++) {
+        const from = addDays(start, w * DAYS_PER_WEEK);
+        const to = addDays(start, w * DAYS_PER_WEEK + DAYS_PER_WEEK - 1);
+        weekly.push(filtered.filter((r) => r.date >= from && r.date <= to).reduce((a, r) => a + r.minutes, 0));
+      }
+      const byReason = DOWNTIME_REASONS.map((rc) => ({ reason: rc, minutes: records.filter((r) => r.reason === rc).reduce((a, r) => a + r.minutes, 0) })).sort((a, b) => b.minutes - a.minutes);
+      return { filtered, downtimeMin, failures, mtbfH, mttrMin, avail, byLine, weekly, byReason };
+    }
+
+    function newChart(h) {
+      const canvas = el("canvas");
+      const box = el("div", { class: "chart-box" + (h ? " tall" : "") }, canvas);
+      return { box, canvas };
+    }
+    function add(c) { charts.push(c); return c; }
+
+    function render() {
+      charts.forEach((c) => c.destroy());
+      charts.length = 0;
+      const c = compute();
+
+      main.innerHTML = "";
+      main.append(
+        kpiCards([
+          { label: "Total downtime", value: fmt(c.downtimeMin) + " min", sub: c.failures + " events", status: rag("downtime", c.downtimeMin / totalAvailableMinutes() * 100) },
+          { label: "MTBF", value: fmt(c.mtbfH, 1) + " hr", sub: "mean time between failures", status: rag("mtbf", c.mtbfH) },
+          { label: "MTTR", value: fmt(c.mttrMin, 0) + " min", sub: "mean time to repair", status: rag("mttr", c.mttrH) },
+          { label: "Availability", value: pctStr(c.avail, 2), sub: "MTBF ÷ (MTBF + MTTR)", status: rag("availability", c.avail) },
+        ]),
+        (() => {
+          if (selectedReason) {
+            return el("div", { style: "margin-bottom:16px;display:flex;align-items:center;gap:10px" },
+              el("span", { style: "font-size:13px;color:var(--muted)" }, "Filtered by cause:"),
+              pill("bad", selectedReason),
+              el("button", { class: "btn", type: "button", onclick: () => { selectedReason = null; render(); } }, "Clear filter")
+            );
+          }
+          return null;
+        })(),
+        el("div", { class: "grid cols-2" },
+          card("Downtime cause Pareto", "", (() => {
+            const { box, canvas } = newChart(true);
+            const labels = c.byReason.map((r) => r.reason);
+            const values = c.byReason.map((r) => r.minutes);
+            const pc = add(paretoChart(canvas, { labels, values, valueLabel: "Downtime (min)", yTitle: "Minutes" }));
+            pc.options.onClick = (evt) => {
+              const pts = pc.getElementsAtEventForMode(evt, "index", { intersect: false });
+              if (pts.length) {
+                selectedReason = labels[pts[0].index];
+                render();
+              }
+            };
+            pc.update();
+            return box;
+          })()),
+          card("Downtime by line", "", (() => {
+            const { box, canvas } = newChart(true);
+            add(barChart(canvas, { labels: c.byLine.map((l) => l.line), datasets: [{ label: "Downtime (min)", data: c.byLine.map((l) => l.minutes) }], yTitle: "Minutes" }));
+            return box;
+          })())
+        ),
+        el("div", { class: "grid cols-2" },
+          card("Weekly downtime trend", "", (() => {
+            const { box, canvas } = newChart();
+            add(lineChart(canvas, { labels: Array.from({ length: WEEKS }, (_, i) => "W" + (i + 1)), datasets: [{ label: "Downtime (min)", data: c.weekly }], yTitle: "Minutes", fill: true }));
+            return box;
+          })()),
+          card("Top 5 downtime causes", "", (() => {
+            const { box, canvas } = newChart();
+            const top = c.byReason.slice(0, 5);
+            add(doughnutChart(canvas, { labels: top.map((r) => r.reason), values: top.map((r) => r.minutes) }));
+            return box;
+          })())
+        ),
+        el("h3", { style: "margin:18px 0 10px" }, "Reason list — click to filter"),
+        el("div", { style: "display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px" },
+          ...c.byReason.map((r) => {
+            const st = rag("mttr", (r.minutes / Math.max(c.failures, 1)) / 60);
+            return el("button", {
+              type: "button",
+              class: "btn",
+              style: (selectedReason === r.reason ? "border-color:var(--c3)" : ""),
+              onclick: () => { selectedReason = selectedReason === r.reason ? null : r.reason; render(); },
+            }, r.reason + " · " + fmt(r.minutes) + " min");
+          })
+        ),
+        dataTable(
+          [
+            { label: "Date", key: "date", render: (r) => fmtDate(r.date) },
+            "Line",
+            "Machine",
+            "Reason",
+            { label: "Minutes", key: "minutes", align: "right", render: (r) => fmt(r.minutes) },
+            { label: "Status", key: "minutes", render: (r) => pill(rag("mttr", r.minutes / 60), r.minutes / 60 <= 1 ? "Short" : r.minutes / 60 <= 3 ? "Moderate" : "Long") },
+          ],
+          c.filtered.slice(0, 40)
+        ),
+        insights([
+          "Top cause <b>" + c.byReason[0].reason + "</b> accounts for <b>" + fmt(c.byReason[0].minutes) + " min</b> (" + pctStr(c.byReason[0].minutes / Math.max(c.downtimeMin, 1), 0) + " of downtime). Click it to isolate the pattern.",
+          "Availability is <b>" + pctStr(c.avail, 2) + "</b> with MTBF " + fmt(c.mtbfH, 1) + " hr and MTTR " + fmt(c.mttrMin, 0) + " min — " + (c.avail >= 90 ? "healthy." : c.avail >= 80 ? "acceptable but improvable." : "<b>below target</b>; prioritize the top Pareto causes."),
+          (selectedReason ? "Currently filtered to <b>" + selectedReason + "</b>: " + c.failures + " events totalling " + fmt(c.downtimeMin) + " min." : "Select a cause (bar or list) to drill into its trend, line split and records."),
+        ]),
+        calcSection("How it's calculated", [
+          "MTBF (hr) = total uptime (hr) ÷ number of failures",
+          "MTTR (min) = total repair time (min) ÷ number of failures",
+          "Availability % = MTBF ÷ (MTBF + MTTR)",
+          "Downtime % = total downtime ÷ total available time × 100",
+          "Pareto cumulative % = running total of cause minutes ÷ grand total × 100",
+        ], [
+          "Uptime = total available time − downtime. Available time = lines × weeks × days × hours.",
+          "The 80% rule: typically ~80% of downtime comes from ~20% of causes.",
+        ])
+      );
+    }
+
+    function setupToolbar() {
+      toolbar.append(
+        toolbarButtons({
+          onRegenerate: () => { seed = Math.floor(Math.random() * 1e8); records = generate(); selectedReason = null; render(); },
+          onExport: () => {
+            const c = compute();
+            downloadCSV("downtime-log", ["Date", "Line", "Machine", "Reason", "Minutes"], c.filtered.map((r) => ({ "Date": fmtDate(r.date), "Line": r.line, "Machine": r.machine, "Reason": r.reason, "Minutes": r.minutes })));
+          },
+        })
+      );
+    }
+
+    records = generate();
+    setupToolbar();
+    render();
+  </script>
+</body>
+</html>

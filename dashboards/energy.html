@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Energy & Utilities — Manufacturing Analytics</title>
+  <meta name="description" content="Energy consumption, intensity, cost and peak demand analysis across utilities with target comparison." />
+  <meta name="theme-color" content="#05060d" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/design-system.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <script type="module">
+    import {
+      renderShell, el, kpiCards, dataTable, insights, calcSection, card, heatmap,
+      fmt, pctStr, pill, make, lineChart, barChart, doughnutChart, color, colorAlpha,
+      rag, makeRng, MONTHS, toolbarButtons, downloadCSV,
+    } from "./shared/bundle.js";
+
+    const shell = renderShell({
+      category: "Executive Level",
+      kicker: "Executive Level",
+      title: "Energy & Utilities",
+      description: "Energy consumption and cost across utilities, energy intensity per unit and peak-demand analysis against a target — for sustainability and cost reduction.",
+    });
+    const { main, toolbar } = shell;
+
+    const UTILITIES = [
+      { name: "Electricity", rate: 8.5, share: 0.65 },
+      { name: "Gas", rate: 12.0, share: 0.20 },
+      { name: "Water", rate: 30.0, share: 0.05 },
+      { name: "Compressed air", rate: 15.0, share: 0.10 },
+    ];
+
+    let seed = 7;
+
+    function gen() {
+      const rng = makeRng(seed);
+      const rows = [];
+      for (let m = 0; m < 12; m++) {
+        const volume = rng.int(78000, 118000);
+        const intensity = rng.float(0.82, 1.08);
+        const kwh = Math.round(volume * intensity);
+        const split = UTILITIES.map((u) => {
+          const s = Math.max(0, u.share + rng.float(-0.03, 0.03));
+          return Math.round(kwh * s);
+        });
+        const cost = split.reduce((sum, k, i) => sum + k * UTILITIES[i].rate, 0);
+        const peak = rng.int(480, 720);
+        rows.push({ month: MONTHS[m], volume, intensity, kwh, split, cost, peak });
+      }
+      return rows;
+    }
+
+    let rows = gen();
+    const targetIntensity = 0.9;
+    let chartInstances = [];
+
+    function destroyCharts() {
+      chartInstances.forEach((c) => c && typeof c.destroy === "function" && c.destroy());
+      chartInstances = [];
+    }
+
+    function render() {
+      destroyCharts();
+      rows = gen();
+      const totalCost = rows.reduce((a, r) => a + r.cost, 0);
+      const totalKwh = rows.reduce((a, r) => a + r.kwh, 0);
+      const totalVol = rows.reduce((a, r) => a + r.volume, 0);
+      const avgIntensity = totalKwh / totalVol;
+      const maxPeak = Math.max(...rows.map((r) => r.peak));
+      const half = rows.length / 2;
+      const h1 = rows.slice(0, half).reduce((a, r) => a + r.kwh, 0);
+      const h2 = rows.slice(half).reduce((a, r) => a + r.kwh, 0);
+      const yoy = ((h2 - h1) / h1) * 100;
+
+      const utilTotals = UTILITIES.map((u, i) => rows.reduce((a, r) => a + r.split[i], 0));
+
+      main.innerHTML = "";
+      main.append(
+        kpiCards([
+          { label: "Energy cost", value: "৳" + fmt(totalCost, 0), sub: "12 months", status: "good" },
+          { label: "Energy intensity", value: avgIntensity.toFixed(2) + " kWh/u", sub: "target " + targetIntensity + " kWh/u", status: rag("energy", avgIntensity) },
+          { label: "Peak demand", value: fmt(maxPeak) + " kW", sub: "max month", status: "warn" },
+          { label: "H2 vs H1", value: (yoy >= 0 ? "+" : "") + yoy.toFixed(1) + "%", sub: "consumption change", status: yoy <= 0 ? "good" : "warn" },
+        ]),
+        el("div", { class: "grid cols-2" },
+          card("Consumption by utility", "",
+            el("div", { class: "chart-box" }, el("canvas", { id: "eUtil" }))),
+          card("Monthly consumption (kWh)", "",
+            el("div", { class: "chart-box" }, el("canvas", { id: "eTrend" }))),
+          card("Energy intensity (kWh/unit)", "",
+            el("div", { class: "chart-box" }, el("canvas", { id: "eIntensity" }))),
+          card("Monthly energy cost (BDT)", "",
+            el("div", { class: "chart-box" }, el("canvas", { id: "eCost" }))),
+          card("Peak demand by month (kW)", "",
+            el("div", { class: "chart-box" }, el("canvas", { id: "ePeak" })))
+        ),
+        el("h3", { style: "margin:18px 0 10px" }, "Monthly detail"),
+        buildTable(),
+        insights([
+          "Average intensity is <b>" + avgIntensity.toFixed(2) + " kWh/unit</b> vs a target of " + targetIntensity + " — " + (avgIntensity > targetIntensity ? "<b>above target</b>, indicating an energy-reduction opportunity." : "within target."),
+          "Electricity is the largest utility at <b>" + pctStr((utilTotals[0] / totalKwh) * 100) + "</b> of consumption — a Kaizen focus on motor/injection-machine load would yield the biggest saving.",
+          "Peak demand reaches <b>" + fmt(maxPeak) + " kW</b>; load-shifting to off-peak could cut demand charges.",
+        ]),
+        calcSection("How it's calculated", [
+          "Energy intensity (kWh/unit) = Total kWh consumed ÷ Units produced",
+          "Energy cost (BDT) = Σ (kWh by utility × tariff rate)",
+          "Utility share (%) = kWh by utility ÷ Total kWh × 100",
+          "H2 vs H1 change (%) = (last 6 months − first 6 months) ÷ first 6 months × 100",
+        ], [
+          "Tariff rates are illustrative synthetic values (BDT per unit).",
+          "Lower energy intensity = better (see RAG status).",
+        ])
+      );
+
+      doughnutChart(document.getElementById("eUtil"), { labels: UTILITIES.map((u) => u.name), values: utilTotals });
+      lineChart(document.getElementById("eTrend"), { labels: rows.map((r) => r.month), datasets: [{ label: "kWh", data: rows.map((r) => r.kwh) }], yTitle: "kWh" });
+      chartInstances.push(
+        make(document.getElementById("eIntensity"), {
+          type: "line",
+          data: {
+            labels: rows.map((r) => r.month),
+            datasets: [
+              { label: "Intensity", data: rows.map((r) => +r.intensity.toFixed(3)), borderColor: color(0), backgroundColor: colorAlpha(0, 0.12), fill: true, tension: 0.3, pointRadius: 3 },
+              { label: "Target", data: rows.map(() => targetIntensity), borderColor: "#f87171", borderDash: [6, 4], pointRadius: 0, borderWidth: 2 },
+            ],
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom" } }, scales: { y: { title: { display: true, text: "kWh / unit" } } } },
+        })
+      );
+      barChart(document.getElementById("eCost"), { labels: rows.map((r) => r.month), datasets: [{ label: "Cost (BDT)", data: rows.map((r) => Math.round(r.cost)) }], yTitle: "BDT" });
+      barChart(document.getElementById("ePeak"), { labels: rows.map((r) => r.month), datasets: [{ label: "Peak (kW)", data: rows.map((r) => r.peak) }], yTitle: "kW" });
+    }
+
+    function buildTable() {
+      const cols = [
+        { label: "Month", key: "month" },
+        { label: "Volume (u)", key: "volume", align: "right", render: (r) => fmt(r.volume) },
+        { label: "kWh", key: "kwh", align: "right", render: (r) => fmt(r.kwh) },
+        { label: "Intensity", key: "intensity", align: "right", render: (r) => r.intensity.toFixed(3) },
+        { label: "Cost (BDT)", key: "cost", align: "right", render: (r) => fmt(Math.round(r.cost)) },
+        { label: "Peak (kW)", key: "peak", align: "right" },
+        { label: "Status", key: "status", render: (r) => pill(rag("energy", r.intensity), rag("energy", r.intensity).toUpperCase()) },
+      ];
+      return dataTable(cols, rows);
+    }
+
+    toolbar.append(toolbarButtons({
+      onRegenerate: () => { seed = seed + 1; render(); },
+      onExport: () => downloadCSV("energy-utilities.csv", ["month", "volume", "kwh", "intensity", "cost", "peak"], rows.map((r) => ({ month: r.month, volume: r.volume, kwh: r.kwh, intensity: r.intensity.toFixed(3), cost: Math.round(r.cost), peak: r.peak }))),
+    }));
+
+    render();
+  </script>
+</body>
+</html>
